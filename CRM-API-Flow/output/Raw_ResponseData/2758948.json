@@ -1,0 +1,33 @@
+{
+  "status": true,
+  "data": {
+    "loanno": "1206509",
+    "cname": "M MOHAMMED TARIEFF",
+    "mobileno": "7299827980",
+    "altno": "7299827980",
+    "address": "VETRIVEL FINE NO 3, JAWAHARLAL NEHRU ROAD, KOYAMBEDU, CHENNAI, CHENNAI, INDIA, TAMIL NADU, CHENNAI, 600107",
+    "landmark": "NA",
+    "pincode": "600107",
+    "Status": "No Such Address Found",
+    "agentid": "boop",
+    "Selection": "office",
+    "Call review": "RNR",
+    "Unable to locate": "Door #",
+    "Locality": "Middle",
+    "Additional Comments": "door no not tracable call to applicant no rnr ",
+    "Final Recommendation": "Negative",
+    "In Case of Negative": "No Such Address Found",
+    "TL Comments": "",
+    "lat": "13.0725695",
+    "longi": "80.2013279",
+    "post_timestamp": "08-08-2026 11:00:30am",
+    "Photo": "Invalid",
+    "TAT": "Within TAT",
+    "updateby": "fathima",
+    "updated_timestamp": "08-08-2026 11:31",
+    "premise_1": "ska_app/img/client/2758948image1.jpg",
+    "premise_2": "ska_app/img/client/2758948image2.jpg",
+    "selfie_picture": "ska_app/img/client/2758948image3.jpg",
+    "pincode_status": "8949.3 Kilometers"
+  }
+}

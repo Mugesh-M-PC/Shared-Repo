@@ -1,11 +1,11 @@
-node_modules/
-output/
-test-results/
-playwright-report/
-blob-report/
+# node_modules/
+# output/
+# test-results/
+# playwright-report/
+# blob-report/
 
-# Keep credentials local. Existing tracked environment files should be
-# removed from Git history separately after their credentials are rotated.
-.env
-.env.*
-!.env.example
+# # Keep credentials local. Existing tracked environment files should be
+# # removed from Git history separately after their credentials are rotated.
+# .env
+# .env.*
+# !.env.example
