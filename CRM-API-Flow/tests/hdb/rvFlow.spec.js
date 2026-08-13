@@ -7,7 +7,7 @@ const { saveApiResponse } = require('../../src/core/helpers/apiResponseHandler')
 const {
   fetchCrmCustomerDetails,
   fetchCrmVerificationList,
-  getLastSevenDaysDateRange,
+  getLastEightDaysDateRange,
   updateTokenStatus,
 } = require('../../src/core/helpers/crmApiHelper');
 const {
@@ -19,6 +19,7 @@ const {
   isReferredRecommendation,
 } = require('../../src/core/helpers/duplicateItemSelector');
 const { fillApplicantAvailable, fillNoSuchAddressFound, fillApplicantNotAvailable, fillDoorLocked, fillEntryNotAllowed, fillLoanCanceled, fillNoPersonStaying, mapRVCRMData } = require('../../src/banks/hdb/rv');
+const { isGoodNameMatch } = require('../../src/core/helpers/helper');
 const baseUrl = process.env.CRM_BASE_URL;
 
 const RV_SCENARIOS = {
@@ -224,51 +225,6 @@ function getRvScenario(statusText) {
   return null;
 }
 
-function isGoodNameMatch(crmName, tableName) {
-  const crm = normalize(crmName);
-  const table = normalize(tableName);
-
-  if (!crm || !table) return false;
-
-  const crmTokens = crm.split(/\s+/).filter(Boolean);
-  const tableTokens = table.split(/\s+/).filter(Boolean);
-
-  // Case A – CRM looks like husband / short name
-  const isShortCrm = crmTokens.length <= 2 &&
-    (crmTokens.length === 1 || crmTokens[1].length <= 2);
-
-  if (isShortCrm) {
-    // Must contain the first significant token of CRM
-    // and the table name should NOT start with a different first name
-    const primary = crmTokens[0];
-    if (!tableTokens.includes(primary)) return false;
-
-    // Reject if table has a clear extra first name before the primary
-    // e.g. "Jessica Elon" when CRM is "Elon"
-    if (tableTokens.length > 1 &&
-      tableTokens[0] !== primary &&
-      tableTokens[1] === primary) {
-      return false;          // ← skips "Jessica Elon"
-    }
-    return true;
-  }
-
-  // Case B – CRM looks like full / wife name
-  // Require high token overlap (≥ 90 %)
-  const common = crmTokens.filter(t => tableTokens.includes(t));
-  const similarity = common.length / Math.max(crmTokens.length, 1);
-  return similarity >= 0.9;
-}
-
-function normalize(str) {
-  return String(str || '')
-    .toLowerCase()
-    .replace(/\b(mr|mrs|ms|smt|shri|dr)\b\.?/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 async function openResidenceVerification(bankPage, loanNo, cName) {
   const applicationNumber = String(loanNo || '').trim();
   const applicantName = String(cName || '').trim();
@@ -424,18 +380,16 @@ async function openResidenceVerification(bankPage, loanNo, cName) {
   ).toHaveText('Residence Verification');
 
   await expect(
-    matchingRow.locator(
-      'td:nth-child(3) a.application-link'
-    )
+    matchingRow.locator('td:nth-child(3)')
   ).toHaveText(applicationNumber);
 
-  console.log(
-    `Opening application ${applicationNumber}...`
-  );
+  console.log(`Opening application ${applicationNumber}...`);
 
-  await matchingRow
-    .locator('a.application-link')
-    .click();
+  // await matchingRow
+  //   .getByRole('link', { name: 'Residence Verification' })
+  //   .click();
+
+  await matchingRow.locator('td:nth-child(2) a').click();
 
   await expect(
     bankPage.locator('#dynSave')
@@ -469,7 +423,7 @@ test('HDB RV Flow', async ({ page }) => {
   const {
     startDate,
     endDate,
-  } = getLastSevenDaysDateRange();
+  } = getLastEightDaysDateRange();
 
   const rvListQuery = {
     clientId: process.env.CRM_CLIENT_ID,
@@ -696,18 +650,18 @@ test('HDB RV Flow', async ({ page }) => {
       //   mappedData
       // );
 
-      // const downloadedMedia = [];
+      const downloadedMedia = [];
 
-      const downloadedMedia = await mediaDownloader(
-        page.request,
-        tokenId,
-        detailsData,
-        {
-          bank: 'HDB',
-          crmBaseUrl: baseUrl,
-          minimumImages: 1,
-        }
-      );
+      // const downloadedMedia = await mediaDownloader(
+      //   page.request,
+      //   tokenId,
+      //   detailsData,
+      //   {
+      //     bank: 'HDB',
+      //     crmBaseUrl: baseUrl,
+      //     minimumImages: 1,
+      //   }
+      // );
 
       const scenario = getRvScenario(mappedData.status);
 
@@ -753,26 +707,26 @@ test('HDB RV Flow', async ({ page }) => {
       );
 
       if (scenario === RV_SCENARIOS.APPLICANT_AVAILABLE) {
-        await fillApplicantAvailable(bankPage, mappedData, downloadedMedia);
-        // await fillApplicantAvailable(bankPage, mappedData, manualRvAttachments);
+        // await fillApplicantAvailable(bankPage, mappedData, downloadedMedia);
+        await fillApplicantAvailable(bankPage, mappedData, manualRvAttachments);
       } else if (scenario === RV_SCENARIOS.APPLICANT_NOT_AVAILABLE) {
-        await fillApplicantNotAvailable(bankPage, mappedData, downloadedMedia);
-        // await fillApplicantNotAvailable(bankPage, mappedData, manualRvAttachments);
+        // await fillApplicantNotAvailable(bankPage, mappedData, downloadedMedia);
+        await fillApplicantNotAvailable(bankPage, mappedData, manualRvAttachments);
       } else if (scenario === RV_SCENARIOS.DOOR_LOCKED) {
-        await fillDoorLocked(bankPage, mappedData, downloadedMedia);
-        // await fillDoorLocked(bankPage, mappedData, manualRvAttachments);
+        // await fillDoorLocked(bankPage, mappedData, downloadedMedia);
+        await fillDoorLocked(bankPage, mappedData, manualRvAttachments);
       } else if (scenario === RV_SCENARIOS.NO_SUCH_PERSON_STAYING) {
-        await fillNoPersonStaying(bankPage, mappedData, downloadedMedia);
-        // await fillNoPersonStaying(bankPage, mappedData, manualRvAttachments);
+        // await fillNoPersonStaying(bankPage, mappedData, downloadedMedia);
+        await fillNoPersonStaying(bankPage, mappedData, manualRvAttachments);
       } else if (scenario === RV_SCENARIOS.NO_SUCH_ADDRESS_FOUND) {
-        await fillNoSuchAddressFound(bankPage, mappedData, downloadedMedia);
-        // await fillNoSuchAddressFound(bankPage, mappedData, manualRvAttachments);
+        // await fillNoSuchAddressFound(bankPage, mappedData, downloadedMedia);
+        await fillNoSuchAddressFound(bankPage, mappedData, manualRvAttachments);
       } else if (scenario === RV_SCENARIOS.ENTRY_NOT_ALLOWED) {
-        await fillEntryNotAllowed(bankPage, mappedData, downloadedMedia);
-        // await fillEntryNotAllowed(bankPage, mappedData, manualRvAttachments);
+        // await fillEntryNotAllowed(bankPage, mappedData, downloadedMedia);
+        await fillEntryNotAllowed(bankPage, mappedData, manualRvAttachments);
       } else if (scenario === RV_SCENARIOS.LOAN_CANCELED) {
-        await fillLoanCanceled(bankPage, mappedData, downloadedMedia);
-        // await fillLoanCanceled(bankPage, mappedData, manualRvAttachments);
+        // await fillLoanCanceled(bankPage, mappedData, downloadedMedia);
+        await fillLoanCanceled(bankPage, mappedData, manualRvAttachments);
       }
 
       // update token status to completed

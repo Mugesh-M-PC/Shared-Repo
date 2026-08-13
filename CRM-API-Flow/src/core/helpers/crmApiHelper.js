@@ -122,7 +122,7 @@ function normalizeCrmDate(value, fieldName) {
   return normalized;
 }
 
-function getLastSevenDaysDateRange(referenceDate = new Date()) {
+function getLastEightDaysDateRange(referenceDate = new Date()) {
   const endDateValue = new Date(referenceDate);
 
   if (Number.isNaN(endDateValue.getTime())) {
@@ -133,7 +133,7 @@ function getLastSevenDaysDateRange(referenceDate = new Date()) {
   }
 
   const startDateValue = new Date(endDateValue);
-  startDateValue.setDate(startDateValue.getDate() - 6);
+  startDateValue.setDate(startDateValue.getDate() - 7);
 
   return {
     startDate: formatCrmDate(startDateValue),
@@ -433,6 +433,6 @@ async function updateTokenStatus(
 module.exports = {
   fetchCrmCustomerDetails,
   fetchCrmVerificationList,
-  getLastSevenDaysDateRange,
+  getLastEightDaysDateRange,
   updateTokenStatus,
 };

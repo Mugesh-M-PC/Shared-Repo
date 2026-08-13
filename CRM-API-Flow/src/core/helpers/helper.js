@@ -239,8 +239,54 @@ async function sortDatatable3ByDateDesc(page) {
     await page.waitForSelector('#datatable3 tbody tr', { timeout: 15000 });
 };
 
+function normalize(str) {
+    return String(str || '')
+        .toLowerCase()
+        .replace(/\b(mr|mrs|ms|smt|shri|dr)\b\.?/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isGoodNameMatch(crmName, tableName) {
+    const crm = normalize(crmName);
+    const table = normalize(tableName);
+
+    if (!crm || !table) return false;
+
+    const crmTokens = crm.split(/\s+/).filter(Boolean);
+    const tableTokens = table.split(/\s+/).filter(Boolean);
+
+    // Case A – CRM looks like husband / short name
+    const isShortCrm = crmTokens.length <= 2 &&
+        (crmTokens.length === 1 || crmTokens[1].length <= 2);
+
+    if (isShortCrm) {
+        // Must contain the first significant token of CRM
+        // and the table name should NOT start with a different first name
+        const primary = crmTokens[0];
+        if (!tableTokens.includes(primary)) return false;
+
+        // Reject if table has a clear extra first name before the primary
+        // e.g. "Jessica Elon" when CRM is "Elon"
+        if (tableTokens.length > 1 &&
+            tableTokens[0] !== primary &&
+            tableTokens[1] === primary) {
+            return false;          // ← skips "Jessica Elon"
+        }
+        return true;
+    }
+
+    // Case B – CRM looks like full / wife name
+    // Require high token overlap (≥ 90 %)
+    const common = crmTokens.filter(t => tableTokens.includes(t));
+    const similarity = common.length / Math.max(crmTokens.length, 1);
+    return similarity >= 0.9;
+}
+
 module.exports = {
     createUpdateStatusCsvLogger,
     setDatatable3PageLength,
     sortDatatable3ByDateDesc,
+    isGoodNameMatch,
 }

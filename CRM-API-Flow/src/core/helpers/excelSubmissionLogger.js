@@ -61,10 +61,10 @@ const COLUMNS = [
   'Agent ID',
   'Phone',
   'Status',
-  'Status Details',
   'Final Recommendation',
   'Comments',
   'Automation Status',
+  'Status Details',
   'Error Type',
   'Error Message',
 ];
@@ -111,7 +111,6 @@ function createSubmissionRecord(crmData = {}, automationStatus, error = null) {
     agentId: crmData.agentID || '',
     phone: crmData.phone || '',
     status: crmData.status || '',
-    statusDetails: crmData.statusDetail || '',
     finalRecommendation: crmData.finalRecommendation || '',
     comments:
       crmData.tlComments ||
@@ -119,6 +118,7 @@ function createSubmissionRecord(crmData = {}, automationStatus, error = null) {
       crmData.negativeCaseReason ||
       '',
     automationStatus,
+    statusDetails: crmData.statusDetail || '',
     errorType: getErrorType(error),
     errorMessage: error ? String(error.message || error) : '',
   };
@@ -141,10 +141,10 @@ function recordToCsvLine(record) {
     record.agentId,
     record.phone,
     record.status,
-    record.statusDetails,
     record.finalRecommendation,
     record.comments,
     record.automationStatus,
+    record.statusDetails,
     record.errorType,
     record.errorMessage,
   ]

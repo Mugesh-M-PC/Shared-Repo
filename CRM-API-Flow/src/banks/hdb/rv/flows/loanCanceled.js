@@ -140,18 +140,20 @@ async function fillLoanCanceled(formPage, crm, downloadedMedia) {
   const isCpvPositive = getYesNoBoolean(crm.finalRecommendation);
   await safeClick(formPage, isCpvPositive ? map.cpvResultPositive : map.cpvResultNegative);
   await safeFill(formPage, map.verifierComments, comments);
-  await safeSelectByValue(formPage, map.cpvRejectedReasons, !isCpvPositive && '03');
+  if (!isCpvPositive) {
+    await safeSelectByValue(formPage, map.cpvRejectedReasons, '03');
+  }
   await safeFill(formPage, map.remarks1, crm.remarks);
 
   // Block 8
-  const attachmentPaths = downloadedMedia
-    .map(item => item.path)
-    .filter(Boolean);
-  await uploadAttachments(formPage, attachmentPaths);
+  // const attachmentPaths = downloadedMedia
+  //   .map(item => item.path)
+  //   .filter(Boolean);
+  // await uploadAttachments(formPage, attachmentPaths);
 
-  // await uploadManualRvAttachments(
-  //   formPage, downloadedMedia
-  // );
+  await uploadManualRvAttachments(
+    formPage, downloadedMedia
+  );
 
   // save first part
   await safeSubmitClick(formPage, map.firstPartSave, "First Part Save");

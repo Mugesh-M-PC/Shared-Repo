@@ -7,7 +7,7 @@ const { saveApiResponse } = require('../../src/core/helpers/apiResponseHandler')
 const {
   fetchCrmCustomerDetails,
   fetchCrmVerificationList,
-  getLastSevenDaysDateRange,
+  getLastEightDaysDateRange,
   updateTokenStatus,
 } = require('../../src/core/helpers/crmApiHelper');
 const {
@@ -28,6 +28,7 @@ const {
   fillNoSuchOffice,
   mapOVCRMData,
 } = require('../../src/banks/hdb/ov');
+const { isGoodNameMatch } = require('../../src/core/helpers/helper');
 
 const baseUrl = process.env.CRM_BASE_URL;
 
@@ -248,49 +249,6 @@ function getOvScenario(statusText) {
   return null;
 }
 
-function isGoodNameMatch(crmName, tableName) {
-  const crm = normalize(crmName);
-  const table = normalize(tableName);
-
-  if (!crm || !table) return false;
-
-  const crmTokens = crm.split(/\s+/).filter(Boolean);
-  const tableTokens = table.split(/\s+/).filter(Boolean);
-
-  // Short CRM names must contain the primary name token.
-  const isShortCrm = crmTokens.length <= 2 &&
-    (crmTokens.length === 1 || crmTokens[1].length <= 2);
-
-  if (isShortCrm) {
-    const primary = crmTokens[0];
-    if (!tableTokens.includes(primary)) return false;
-
-    // Reject a different first name preceding the CRM primary name.
-    if (
-      tableTokens.length > 1 &&
-      tableTokens[0] !== primary &&
-      tableTokens[1] === primary
-    ) {
-      return false;
-    }
-    return true;
-  }
-
-  // Full names require at least 90 percent token overlap.
-  const common = crmTokens.filter(token => tableTokens.includes(token));
-  const similarity = common.length / Math.max(crmTokens.length, 1);
-  return similarity >= 0.9;
-}
-
-function normalize(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/\b(mr|mrs|ms|smt|shri|dr)\b\.?/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 async function openOfficeVerification(bankPage, loanNo, cName) {
   const applicationNumber = String(loanNo || '').trim();
   const applicantName = String(cName || '').trim();
@@ -445,18 +403,16 @@ async function openOfficeVerification(bankPage, loanNo, cName) {
   ).toHaveText('Office Verification');
 
   await expect(
-    matchingRow.locator(
-      'td:nth-child(3) a.application-link'
-    )
+    matchingRow.locator('td:nth-child(3)')
   ).toHaveText(applicationNumber);
 
-  console.log(
-    `Opening application ${applicationNumber}...`
-  );
+  console.log(`Opening application ${applicationNumber}...`);
 
-  await matchingRow
-    .locator('a.application-link')
-    .click();
+  // await matchingRow
+  //   .getByRole('link', { name: 'Office Verification' })
+  //   .click();
+
+  await matchingRow.locator('td:nth-child(2) a').click();
 
   await expect(
     bankPage.locator('#saveDynamicFormBtn')
@@ -490,7 +446,7 @@ test('HDB OV Flow', async ({ page }) => {
   const {
     startDate,
     endDate,
-  } = getLastSevenDaysDateRange();
+  } = getLastEightDaysDateRange();
 
   const ovListQuery = {
     clientId:
