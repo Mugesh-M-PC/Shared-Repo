@@ -42,7 +42,9 @@ function createUpdateStatusCsvLogger({
     const normalizedTargetStatus = String(
         targetStatus || ''
     ).trim().toLowerCase();
-    const normalizedRdStatus = Number(targetRdStatus);
+    const normalizedRdStatus = String(
+        targetRdStatus || normalizedTargetStatus
+    ).trim().toLowerCase();
 
     if (!['RV', 'OV', 'ALL'].includes(normalizedType)) {
         throw new Error(
@@ -51,17 +53,22 @@ function createUpdateStatusCsvLogger({
     }
 
     if (
-        !['pending', 'submitted'].includes(normalizedSourceStatus) ||
-        !['pending', 'submitted'].includes(normalizedTargetStatus)
+        !['any', 'pending', 'completed', 'failed'].includes(
+            normalizedSourceStatus
+        ) ||
+        !['pending', 'completed', 'failed'].includes(
+            normalizedTargetStatus
+        )
     ) {
         throw new Error(
-            'sourceStatus and targetStatus must be pending or submitted.'
+            'sourceStatus must be any, pending, completed, or failed; ' +
+            'targetStatus must be pending, completed, or failed.'
         );
     }
 
-    if (![0, 1].includes(normalizedRdStatus)) {
+    if (!['pending', 'completed', 'failed'].includes(normalizedRdStatus)) {
         throw new Error(
-            'targetRdStatus must be either 0 or 1.'
+            'targetRdStatus must be pending, completed, or failed.'
         );
     }
 

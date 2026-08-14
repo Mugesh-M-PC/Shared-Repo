@@ -10,19 +10,23 @@
     "start:rv": "npm run env:prod && playwright test tests/hdb/rvFlow.spec.js --headed",
     "debug:rv": "npm run env:prod && playwright test tests/hdb/rvFlow.spec.js --headed --debug",
     "start:rv:dev": "npm run env:dev && playwright test tests/hdb/rvFlow.spec.js --headed",
-    "start:rv:stage": "npm run env:stage && playwright test tests/hdb/rvFlow.spec.js --headed",
     "debug:rv:dev": "npm run env:dev && playwright test tests/hdb/rvFlow.spec.js --headed --debug",
-    "debug:rv:stage": "npm run env:stage && playwright test tests/hdb/rvFlow.spec.js --headed --debug",
     "start:ov:dev": "npm run env:dev && playwright test tests/hdb/ovFlow.spec.js --headed",
     "debug:ov:dev": "npm run env:dev && playwright test tests/hdb/ovFlow.spec.js --headed --debug",
+    "start:rv:stage": "npm run env:stage && playwright test tests/hdb/rvFlow.spec.js --headed",
+    "debug:rv:stage": "npm run env:stage && playwright test tests/hdb/rvFlow.spec.js --headed --debug",
+    "debug:ov:stage": "npm run env:stage && playwright test tests/hdb/ovFlow.spec.js --headed --debug",
     "update-status:dev": "npm run env:dev && playwright test tests/updateStatus.spec.js --headed",
     "update-status:stage": "npm run env:stage && playwright test tests/updateStatus.spec.js --headed",
     "report": "playwright show-report --port 9324",
-  "report:file": "start playwright-report/index.html"
+    "report:file": "start playwright-report/index.html"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "dotenv": "^17.4.2",
     "playwright": "^1.55.0"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
   }
 }

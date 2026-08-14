@@ -20,16 +20,15 @@ const {
   getAreaSqFtRadioValue,
   getEarningMemberRadioValue,
 } = require('../form/formHelper');
-const { uploadAttachments } = require('../../../../core/media/mediaHelper');
 
 const {
-  uploadManualRvAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbRvMapping');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function fillDoorLocked(formPage, crm, downloadedMedia) {
+async function fillDoorLocked(formPage, crm, manualAttachments) {
   const baseComments =
     crm.tlComments ||
     crm.verifierComments ||
@@ -158,13 +157,8 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
   await safeFill(formPage, map.remarks1, crm.remarks);
 
   // Block 8
-  // const attachmentPaths = downloadedMedia
-  //   .map(item => item.path)
-  //   .filter(Boolean);
-  // await uploadAttachments(formPage, attachmentPaths);
-
-  await uploadManualRvAttachments(
-    formPage, downloadedMedia
+  await uploadManualAttachments(
+    formPage, manualAttachments
   );
 
   // save first part

@@ -11,7 +11,7 @@ const {
   getOVRecommendation,
 } = require('../form/formHelper');
 const {
-  uploadAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbOvMapping');
 
@@ -55,7 +55,7 @@ const DEFAULT_VALUES = Object.freeze({
   finalResult: '2',
 });
 
-async function fillLoanCanceled(formPage, crm, downloadedMedia) {
+async function fillLoanCanceled(formPage, crm, manualAttachments) {
   const baseComments =
     crm.tlComments ||
     crm.additionalComments ||
@@ -253,7 +253,7 @@ async function fillLoanCanceled(formPage, crm, downloadedMedia) {
   // Block 10: Attachments and first save
   // =========================================================
 
-  await uploadAttachments(formPage, downloadedMedia);
+  await uploadManualAttachments(formPage, manualAttachments);
 
   let saveAlertMessage = null;
   const dialogHandler = async dialog => {
@@ -263,11 +263,11 @@ async function fillLoanCanceled(formPage, crm, downloadedMedia) {
   };
 
   formPage.on('dialog', dialogHandler);
-  try {
-    await safeSubmitClick(formPage, map.dynamicFormSave, 'Dynamic Form Save');
-  } finally {
-    formPage.off('dialog', dialogHandler);
-  }
+  // try {
+  //   await safeSubmitClick(formPage, map.dynamicFormSave, 'Dynamic Form Save');
+  // } finally {
+  //   formPage.off('dialog', dialogHandler);
+  // }
 
   if (!saveAlertMessage) {
     console.log('No alert appeared after Dynamic Form Save.');
@@ -294,15 +294,17 @@ async function fillLoanCanceled(formPage, crm, downloadedMedia) {
   );
   await safeFill(formPage, map.remarks2, crm.remarks);
 
-  // The HDB portal has no "Loan Cancelled / Not Applied" rejection option.
-  // Do not choose an unrelated reason or submit this scenario until the bank
-  // confirms the correct CPV rejection code.
-  const error = new Error(
-    'Loan Cancelled / Not Applied has no confirmed HDB CPV rejection code; ' +
-    'the form was filled but not submitted.'
+  await safeSubmitClick(
+    formPage,
+    map.dynamicFormSave,
+    'Dynamic Form Save'
   );
-  error.category = 'FIELD_MAPPING_ERROR';
-  throw error;
+
+  await safeSubmitClick(
+    formPage,
+    map.saveAndProceed,
+    'Save And Proceed'
+  );
 }
 
 module.exports = {

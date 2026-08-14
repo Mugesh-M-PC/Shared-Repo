@@ -20,7 +20,7 @@ const {
   getOVRecommendation,
 } = require('../form/formHelper');
 const {
-  uploadAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbOvMapping');
 
@@ -62,7 +62,7 @@ const DEFAULT_VALUES = Object.freeze({
   finalResult: '2',
 });
 
-async function fillEntryNotAllowed(formPage, crm, downloadedMedia) {
+async function fillEntryNotAllowed(formPage, crm, manualAttachments) {
   const comments =
     crm.tlComments ||
     crm.additionalComments ||
@@ -395,7 +395,7 @@ async function fillEntryNotAllowed(formPage, crm, downloadedMedia) {
   // Block 10: Attachments and first save
   // =========================================================
 
-  await uploadAttachments(formPage, downloadedMedia);
+  await uploadManualAttachments(formPage, manualAttachments);
 
   let saveAlertMessage = null;
   const dialogHandler = async dialog => {
@@ -405,11 +405,11 @@ async function fillEntryNotAllowed(formPage, crm, downloadedMedia) {
   };
 
   formPage.on('dialog', dialogHandler);
-  try {
-    await safeSubmitClick(formPage, map.dynamicFormSave, 'Dynamic Form Save');
-  } finally {
-    formPage.off('dialog', dialogHandler);
-  }
+  // try {
+  //   await safeSubmitClick(formPage, map.dynamicFormSave, 'Dynamic Form Save');
+  // } finally {
+  //   formPage.off('dialog', dialogHandler);
+  // }
 
   if (!saveAlertMessage) {
     console.log('No alert appeared after Dynamic Form Save.');
@@ -437,14 +437,17 @@ async function fillEntryNotAllowed(formPage, crm, downloadedMedia) {
   );
   await safeFill(formPage, map.remarks2, crm.remarks);
 
-  // Save And Proceed is deliberately blocked until the portal rejection code
-  // for Entry Restricted is confirmed.
-  const error = new Error(
-    'Entry Restricted rejection reason is not confirmed; ' +
-    'OV submission was stopped.'
+  await safeSubmitClick(
+    formPage,
+    map.dynamicFormSave,
+    'Dynamic Form Save'
   );
-  error.category = 'FIELD_MAPPING_ERROR';
-  throw error;
+
+  await safeSubmitClick(
+    formPage,
+    map.saveAndProceed,
+    'Save And Proceed'
+  );
 }
 
 module.exports = {

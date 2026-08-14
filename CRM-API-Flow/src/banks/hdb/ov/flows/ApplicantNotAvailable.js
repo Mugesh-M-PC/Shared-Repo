@@ -24,7 +24,7 @@ const {
   getOVRecommendation,
 } = require('../form/formHelper');
 const {
-  uploadAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbOvMapping');
 
@@ -66,7 +66,7 @@ const DEFAULT_VALUES = Object.freeze({
   finalResult: '2',
 });
 
-async function fillApplicantNotAvailable(formPage, crm, downloadedMedia) {
+async function fillApplicantNotAvailable(formPage, crm, manualAttachments) {
   const comments =
     crm.tlComments ||
     crm.additionalComments ||
@@ -413,7 +413,7 @@ async function fillApplicantNotAvailable(formPage, crm, downloadedMedia) {
   // Block 10: Attachments and first save
   // =========================================================
 
-  await uploadAttachments(formPage, downloadedMedia);
+  await uploadManualAttachments(formPage, manualAttachments);
 
   let saveAlertMessage = null;
   const dialogHandler = async dialog => {
@@ -426,15 +426,15 @@ async function fillApplicantNotAvailable(formPage, crm, downloadedMedia) {
   };
 
   formPage.on('dialog', dialogHandler);
-  try {
-    await safeSubmitClick(
-      formPage,
-      map.dynamicFormSave,
-      'Dynamic Form Save'
-    );
-  } finally {
-    formPage.off('dialog', dialogHandler);
-  }
+  // try {
+  //   await safeSubmitClick(
+  //     formPage,
+  //     map.dynamicFormSave,
+  //     'Dynamic Form Save'
+  //   );
+  // } finally {
+  //   formPage.off('dialog', dialogHandler);
+  // }
 
   if (!saveAlertMessage) {
     console.log('No alert appeared after Dynamic Form Save.');
@@ -469,6 +469,12 @@ async function fillApplicantNotAvailable(formPage, crm, downloadedMedia) {
 
   // Final Remarks <- CRM remarks. Empty values are not filled.
   await safeFill(formPage, map.remarks2, crm.remarks);
+
+  await safeSubmitClick(
+    formPage,
+    map.dynamicFormSave,
+    'Dynamic Form Save'
+  );
 
   await safeSubmitClick(
     formPage,

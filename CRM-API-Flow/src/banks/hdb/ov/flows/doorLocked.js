@@ -19,7 +19,7 @@ const {
   getOVRecommendation,
 } = require('../form/formHelper');
 const {
-  uploadAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbOvMapping');
 
@@ -62,7 +62,7 @@ const DEFAULT_VALUES = Object.freeze({
   finalResult: '2',
 });
 
-async function fillDoorLocked(formPage, crm, downloadedMedia) {
+async function fillDoorLocked(formPage, crm, manualAttachments) {
   const baseComments =
     crm.tlComments ||
     crm.additionalComments ||
@@ -90,8 +90,8 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
     formPage,
     map.relationWithApplicant,
     crm.tpcType ||
-      crm.relationWithApplicant ||
-      DEFAULT_VALUES.relationWithApplicant
+    crm.relationWithApplicant ||
+    DEFAULT_VALUES.relationWithApplicant
   );
 
   // Telephone Number <- met person's mobile; fallback: applicant phone.
@@ -213,7 +213,7 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
     formPage,
     map.applicantNameVerifiedFrom,
     applicantVerificationSource ||
-      DEFAULT_VALUES.applicantNameVerifiedFrom
+    DEFAULT_VALUES.applicantNameVerifiedFrom
   );
 
   await safeFill(
@@ -321,8 +321,8 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
     formPage,
     map.referencePersonName,
     referenceDetails ||
-      crm.personMet ||
-      DEFAULT_VALUES.referencePersonName
+    crm.personMet ||
+    DEFAULT_VALUES.referencePersonName
   );
 
   // Applicant Details Confirmed <- CRM confirmation; default: No.
@@ -342,8 +342,8 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
     formPage,
     map.negativeFeedback,
     crm.negativeCaseReason ||
-      crm.additionalComments ||
-      DEFAULT_VALUES.negativeFeedback
+    crm.additionalComments ||
+    DEFAULT_VALUES.negativeFeedback
   );
 
   // =========================================================
@@ -416,7 +416,7 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
   // Block 10: Attachments and first save
   // =========================================================
 
-  await uploadAttachments(formPage, downloadedMedia);
+  await uploadManualAttachments(formPage, manualAttachments);
 
   let saveAlertMessage = null;
   const dialogHandler = async dialog => {
@@ -429,15 +429,15 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
   };
 
   formPage.on('dialog', dialogHandler);
-  try {
-    await safeSubmitClick(
-      formPage,
-      map.dynamicFormSave,
-      'Dynamic Form Save'
-    );
-  } finally {
-    formPage.off('dialog', dialogHandler);
-  }
+  // try {
+  //   await safeSubmitClick(
+  //     formPage,
+  //     map.dynamicFormSave,
+  //     'Dynamic Form Save'
+  //   );
+  // } finally {
+  //   formPage.off('dialog', dialogHandler);
+  // }
 
   if (!saveAlertMessage) {
     console.log('No alert appeared after Dynamic Form Save.');
@@ -472,6 +472,12 @@ async function fillDoorLocked(formPage, crm, downloadedMedia) {
 
   // Final Remarks <- CRM remarks. Empty values are not filled.
   await safeFill(formPage, map.remarks2, crm.remarks);
+
+  await safeSubmitClick(
+    formPage,
+    map.dynamicFormSave,
+    'Dynamic Form Save'
+  );
 
   await safeSubmitClick(
     formPage,

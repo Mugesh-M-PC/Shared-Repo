@@ -1,75 +1,54 @@
 const fs = require('fs');
 const path = require('path');
-
-function getRunTimestamp() {
-  const now = new Date();
-  const pad = value => String(value).padStart(2, '0');
-
-  return [
-    now.getFullYear(),
-    pad(now.getMonth() + 1),
-    pad(now.getDate()),
-  ].join('-') +
-    '_' +
-    [
-      pad(now.getHours()),
-      pad(now.getMinutes()),
-      pad(now.getSeconds()),
-    ].join('-');
-}
-
-function normalizeVerificationType(verificationType) {
-  const normalizedType = String(
-    verificationType || ''
-  ).trim().toUpperCase();
-
-  // if (!['RV', 'OV'].includes(normalizedType)) {
-  //   throw new Error(
-  //     'verificationType must be either RV or OV.'
-  //   );
-  // }
-
-  return normalizedType;
-}
-
-function getSubmissionReportPath(
-  verificationType,
-  timestamp = getRunTimestamp()
-) {
-  const normalizedType = normalizeVerificationType(
-    verificationType
-  );
-
-  return path.join(
-    process.cwd(),
-    'output',
-    `${normalizedType}_Report_${timestamp}.csv`
-  );
-}
+const ExcelJS = require('exceljs');
 
 const DEFAULT_REPORT_PATH = path.join(
   process.cwd(),
   'output',
-  `HDB_Submission_Report_${getRunTimestamp()}.csv`
+  'HDB_Verification_Report.xlsx'
 );
 
-const COLUMNS = [
-  'Timestamp',
-  'Token ID',
-  'Loan No',
-  'Customer Name',
-  'Agent ID',
-  'Phone',
-  'Status',
-  'Final Recommendation',
-  'Comments',
-  'Automation Status',
-  'Status Details',
-  'Error Type',
-  'Error Message',
+const SHEET_NAMES = Object.freeze({
+  RV: 'Residence Verification',
+  OV: 'Office Verification',
+});
+
+const REPORT_COLUMNS = [
+  { header: 'Timestamp', key: 'timestamp', width: 21 },
+  { header: 'Token ID', key: 'tokenId', width: 16 },
+  { header: 'Loan No', key: 'loanNo', width: 18 },
+  { header: 'Customer Name', key: 'customerName', width: 24 },
+  { header: 'Agent ID', key: 'agentId', width: 15 },
+  { header: 'Phone', key: 'phone', width: 16 },
+  { header: 'Status', key: 'status', width: 24 },
+  { header: 'Final Recommendation', key: 'finalRecommendation', width: 23 },
+  { header: 'Comments', key: 'comments', width: 36 },
+  { header: 'Automation Status', key: 'automationStatus', width: 34 },
+  { header: 'Status Details', key: 'statusDetails', width: 38 },
+  { header: 'Error Type', key: 'errorType', width: 28 },
+  { header: 'Error Message', key: 'errorMessage', width: 48 },
 ];
 
+const HEADER_FILL = 'FF1F4E78';
+const HEADER_FONT = 'FFFFFFFF';
+const THIN_BORDER = {
+  style: 'thin',
+  color: { argb: 'FFD9E2F3' },
+};
+
 let writeQueue = Promise.resolve();
+
+function normalizeVerificationType(verificationType) {
+  const normalizedType = String(verificationType || '')
+    .trim()
+    .toUpperCase();
+
+  if (!SHEET_NAMES[normalizedType]) {
+    throw new Error('verificationType must be either RV or OV.');
+  }
+
+  return normalizedType;
+}
 
 function getErrorType(error) {
   if (!error) {
@@ -104,169 +83,332 @@ function getErrorType(error) {
 
 function createSubmissionRecord(crmData = {}, automationStatus, error = null) {
   return {
-    timestamp: new Date().toLocaleString(),
-    tokenId: crmData.tokenId || '',
-    loanNo: crmData.loanNo || '',
-    customerName: crmData.customerName || '',
-    agentId: crmData.agentID || '',
-    phone: crmData.phone || '',
-    status: crmData.status || '',
-    finalRecommendation: crmData.finalRecommendation || '',
-    comments:
+    timestamp: new Date().toISOString(),
+    tokenId: String(crmData.tokenId || ''),
+    loanNo: String(crmData.loanNo || ''),
+    customerName: String(crmData.customerName || ''),
+    agentId: String(crmData.agentID || ''),
+    phone: String(crmData.phone || ''),
+    status: String(crmData.status || ''),
+    finalRecommendation: String(crmData.finalRecommendation || ''),
+    comments: String(
       crmData.tlComments ||
       crmData.verifierComments ||
       crmData.negativeCaseReason ||
-      '',
-    automationStatus,
-    statusDetails: crmData.statusDetail || '',
+      ''
+    ),
+    automationStatus: String(automationStatus || ''),
+    statusDetails: String(crmData.statusDetail || ''),
     errorType: getErrorType(error),
     errorMessage: error ? String(error.message || error) : '',
   };
-}
-
-function escapeCsvValue(value) {
-  const str = value == null ? '' : String(value);
-  if (/[",\r\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function recordToCsvLine(record) {
-  return [
-    record.timestamp,
-    record.tokenId,
-    record.loanNo,
-    record.customerName,
-    record.agentId,
-    record.phone,
-    record.status,
-    record.finalRecommendation,
-    record.comments,
-    record.automationStatus,
-    record.statusDetails,
-    record.errorType,
-    record.errorMessage,
-  ]
-    .map(escapeCsvValue)
-    .join(',');
 }
 
 function getPendingPath(reportPath) {
   return `${reportPath}.pending.jsonl`;
 }
 
-function isFileLockedError(error) {
-  return ['EBUSY', 'EPERM', 'EACCES'].includes(error?.code);
+function getLockPath(reportPath) {
+  return `${reportPath}.lock`;
 }
 
-function flushPendingRecords(reportPath) {
-  const pendingPath = getPendingPath(reportPath);
+function isFileLockedError(error) {
+  return (
+    ['EBUSY', 'EPERM', 'EACCES'].includes(error?.code) ||
+    /being used by another process|resource busy|permission denied/i.test(
+      String(error?.message || '')
+    )
+  );
+}
 
-  if (!fs.existsSync(pendingPath)) {
-    return {
-      flushed: true,
-      pendingCount: 0,
-    };
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+async function removeStaleLock(lockPath) {
+  try {
+    const lockStats = await fs.promises.stat(lockPath);
+
+    if (Date.now() - lockStats.mtimeMs > 120_000) {
+      await fs.promises.unlink(lockPath);
+      return true;
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return true;
+    }
+    throw error;
   }
 
-  const pendingRecords = fs
-    .readFileSync(pendingPath, 'utf8')
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map(line => JSON.parse(line));
+  return false;
+}
 
-  if (pendingRecords.length === 0) {
-    fs.unlinkSync(pendingPath);
+async function withWorkbookLock(reportPath, operation) {
+  const lockPath = getLockPath(reportPath);
+  const timeoutAt = Date.now() + 15_000;
+  let lockHandle;
 
-    return {
-      flushed: true,
-      pendingCount: 0,
-    };
-  }
+  while (!lockHandle) {
+    try {
+      lockHandle = await fs.promises.open(lockPath, 'wx');
+      await lockHandle.writeFile(String(process.pid), 'utf8');
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        throw error;
+      }
 
-  const reportHasContent =
-    fs.existsSync(reportPath) &&
-    fs.statSync(reportPath).size > 0;
+      if (await removeStaleLock(lockPath)) {
+        continue;
+      }
 
-  const csvLines = [];
+      if (Date.now() >= timeoutAt) {
+        const lockError = new Error(
+          `Timed out waiting to update report workbook: ${reportPath}`
+        );
+        lockError.category = 'REPORT_LOCK_TIMEOUT';
+        throw lockError;
+      }
 
-  if (!reportHasContent) {
-    csvLines.push(COLUMNS.map(escapeCsvValue).join(','));
-  }
-
-  for (const record of pendingRecords) {
-    csvLines.push(recordToCsvLine(record));
+      await wait(100);
+    }
   }
 
   try {
-    fs.appendFileSync(
-      reportPath,
-      `${csvLines.join('\n')}\n`,
-      'utf8'
-    );
-
-    fs.unlinkSync(pendingPath);
-
-    return {
-      flushed: true,
-      pendingCount: 0,
-    };
-  } catch (error) {
-    if (isFileLockedError(error)) {
-      console.warn(
-        `CSV is currently open. ${pendingRecords.length} record(s) saved temporarily.`
-      );
-
-      return {
-        flushed: false,
-        pendingCount: pendingRecords.length,
-      };
-    }
-
-    throw error;
+    return await operation();
+  } finally {
+    await lockHandle.close();
+    await fs.promises.unlink(lockPath).catch(error => {
+      if (error.code !== 'ENOENT') {
+        console.warn(
+          `Unable to remove report lock ${lockPath}: ${error.message}`
+        );
+      }
+    });
   }
 }
 
-// async function writeSubmissionRecord(record, reportPath) {
-//   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+function styleHeaderRow(worksheet) {
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 24;
 
-//   const line = recordToCsvLine(record);
-//   const fileExists = fs.existsSync(reportPath);
+  headerRow.eachCell(cell => {
+    cell.font = {
+      bold: true,
+      color: { argb: HEADER_FONT },
+    };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: HEADER_FILL },
+    };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+    cell.border = {
+      top: THIN_BORDER,
+      left: THIN_BORDER,
+      bottom: THIN_BORDER,
+      right: THIN_BORDER,
+    };
+  });
+}
 
-//   if (!fileExists) {
-//     const header = COLUMNS.map(escapeCsvValue).join(',');
-//     fs.writeFileSync(reportPath, `${header}\n${line}\n`, 'utf8');
-//   } else {
-//     fs.appendFileSync(reportPath, `${line}\n`, 'utf8');
-//   }
+function configureWorksheet(worksheet) {
+  if (worksheet.rowCount === 0) {
+    worksheet.columns = REPORT_COLUMNS;
+  } else {
+    REPORT_COLUMNS.forEach((column, index) => {
+      const worksheetColumn = worksheet.getColumn(index + 1);
+      worksheetColumn.key = column.key;
+      worksheetColumn.width = column.width;
+    });
+  }
 
-//   return { reportPath, record };
-// }
+  worksheet.views = [
+    {
+      state: 'frozen',
+      ySplit: 1,
+      showGridLines: false,
+    },
+  ];
+  worksheet.autoFilter = {
+    from: 'A1',
+    to: `M${Math.max(worksheet.rowCount, 1)}`,
+  };
+  worksheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    paperSize: 9,
+  };
+  styleHeaderRow(worksheet);
+}
 
-async function writeSubmissionRecord(record, reportPath) {
-  fs.mkdirSync(path.dirname(reportPath), {
-    recursive: true,
+function ensureReportSheets(workbook) {
+  let workbookChanged = false;
+
+  for (const sheetName of Object.values(SHEET_NAMES)) {
+    let worksheet = workbook.getWorksheet(sheetName);
+
+    if (!worksheet) {
+      worksheet = workbook.addWorksheet(sheetName, {
+        properties: { defaultRowHeight: 18 },
+      });
+      workbookChanged = true;
+    }
+
+    configureWorksheet(worksheet);
+  }
+
+  return workbookChanged;
+}
+
+function getStatusFill(automationStatus) {
+  if (/^SUCCESS/.test(automationStatus)) {
+    return 'FFC6EFCE';
+  }
+  if (/^SKIPPED/.test(automationStatus)) {
+    return 'FFFFEB9C';
+  }
+  return 'FFFFC7CE';
+}
+
+function appendRecordToWorksheet(worksheet, record) {
+  const row = worksheet.addRow({
+    ...record,
+    timestamp: new Date(record.timestamp),
   });
 
+  row.height = 30;
+  row.eachCell({ includeEmpty: true }, cell => {
+    cell.alignment = {
+      vertical: 'top',
+      wrapText: true,
+    };
+    cell.border = {
+      top: THIN_BORDER,
+      left: THIN_BORDER,
+      bottom: THIN_BORDER,
+      right: THIN_BORDER,
+    };
+  });
+
+  row.getCell('timestamp').numFmt = 'yyyy-mm-dd hh:mm:ss';
+  row.getCell('automationStatus').fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: {
+      argb: getStatusFill(record.automationStatus),
+    },
+  };
+  row.getCell('automationStatus').font = { bold: true };
+
+  worksheet.autoFilter = {
+    from: 'A1',
+    to: `M${worksheet.rowCount}`,
+  };
+}
+
+function readPendingRecords(pendingPath) {
+  if (!fs.existsSync(pendingPath)) {
+    return [];
+  }
+
+  return fs
+    .readFileSync(pendingPath, 'utf8')
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line, index) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        error.category = 'REPORT_PENDING_DATA_ERROR';
+        error.message =
+          `Invalid pending report record on line ${index + 1}: ` +
+          error.message;
+        throw error;
+      }
+    });
+}
+
+async function loadWorkbook(reportPath) {
+  const workbook = new ExcelJS.Workbook();
+  const reportExists =
+    fs.existsSync(reportPath) &&
+    fs.statSync(reportPath).size > 0;
+
+  if (reportExists) {
+    await workbook.xlsx.readFile(reportPath);
+  } else {
+    workbook.creator = 'Bandrad CRM API Flow';
+    workbook.created = new Date();
+  }
+
+  workbook.modified = new Date();
+  return { workbook, reportExists };
+}
+
+async function flushPendingRecords(reportPath, initializeWorkbook = false) {
   const pendingPath = getPendingPath(reportPath);
+  const pendingRecords = readPendingRecords(pendingPath);
+  const { workbook, reportExists } = await loadWorkbook(reportPath);
+  const workbookChanged = ensureReportSheets(workbook);
 
-  // Save the record safely before trying to update the CSV.
-  fs.appendFileSync(
-    pendingPath,
-    `${JSON.stringify(record)}\n`,
-    'utf8'
-  );
+  for (const pendingEntry of pendingRecords) {
+    const verificationType = normalizeVerificationType(
+      pendingEntry.verificationType
+    );
+    const worksheet = workbook.getWorksheet(
+      SHEET_NAMES[verificationType]
+    );
+    appendRecordToWorksheet(worksheet, pendingEntry.record);
+  }
 
-  const flushResult = flushPendingRecords(reportPath);
+  if (
+    initializeWorkbook ||
+    !reportExists ||
+    workbookChanged ||
+    pendingRecords.length > 0
+  ) {
+    await workbook.xlsx.writeFile(reportPath);
+  }
+
+  if (pendingRecords.length > 0) {
+    fs.unlinkSync(pendingPath);
+  }
 
   return {
-    reportPath,
-    pendingPath,
-    record,
-    storedInCsv: flushResult.flushed,
-    pendingCount: flushResult.pendingCount,
+    storedInWorkbook: true,
+    pendingCount: 0,
   };
+}
+
+function countPendingRecords(pendingPath) {
+  return readPendingRecords(pendingPath).length;
+}
+
+async function flushOrQueue(reportPath, initializeWorkbook = false) {
+  try {
+    return await flushPendingRecords(reportPath, initializeWorkbook);
+  } catch (error) {
+    if (!isFileLockedError(error)) {
+      throw error;
+    }
+
+    const pendingCount = countPendingRecords(getPendingPath(reportPath));
+    console.warn(
+      'Report workbook is currently open. ' +
+      `${pendingCount} record(s) remain queued.`
+    );
+
+    return {
+      storedInWorkbook: false,
+      pendingCount,
+    };
+  }
 }
 
 function resolveSubmissionReportPath(options = {}) {
@@ -274,79 +416,72 @@ function resolveSubmissionReportPath(options = {}) {
     return options;
   }
 
-  const normalizedOptions = options || {};
-
-  if (normalizedOptions.reportPath) {
-    return normalizedOptions.reportPath;
-  }
-
-  if (normalizedOptions.verificationType) {
-    return getSubmissionReportPath(
-      normalizedOptions.verificationType
-    );
-  }
-
-  return DEFAULT_REPORT_PATH;
+  return options?.reportPath || DEFAULT_REPORT_PATH;
 }
 
 function initializeSubmissionReport(options = {}) {
   const reportPath = resolveSubmissionReportPath(options);
-  const operation = writeQueue.then(() => {
-    fs.mkdirSync(path.dirname(reportPath), {
-      recursive: true,
-    });
+  normalizeVerificationType(options.verificationType);
 
-    const reportHasContent =
-      fs.existsSync(reportPath) &&
-      fs.statSync(reportPath).size > 0;
+  const operation = writeQueue.then(async () => {
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
 
-    if (!reportHasContent) {
-      const header = COLUMNS
-        .map(escapeCsvValue)
-        .join(',');
-
-      fs.writeFileSync(
-        reportPath,
-        `${header}\n`,
-        'utf8'
-      );
-    }
-
-    const flushResult =
-      flushPendingRecords(reportPath);
+    const flushResult = await withWorkbookLock(
+      reportPath,
+      () => flushOrQueue(reportPath, true)
+    );
 
     return {
       reportPath,
       pendingPath: getPendingPath(reportPath),
-      storedInCsv: flushResult.flushed,
-      pendingCount: flushResult.pendingCount,
+      ...flushResult,
     };
   });
 
-  writeQueue = operation.catch(() => { });
+  writeQueue = operation.catch(() => {});
   return operation;
 }
 
 function appendSubmissionRecord({
+  verificationType,
   crmData,
   automationStatus,
   error = null,
   reportPath = DEFAULT_REPORT_PATH,
 }) {
+  const normalizedType = normalizeVerificationType(verificationType);
   const record = createSubmissionRecord(crmData, automationStatus, error);
-  const operation = writeQueue.then(() =>
-    writeSubmissionRecord(record, reportPath)
-  );
-  writeQueue = operation.catch(() => { });
+
+  const operation = writeQueue.then(async () => {
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+
+    return withWorkbookLock(reportPath, async () => {
+      const pendingPath = getPendingPath(reportPath);
+      fs.appendFileSync(
+        pendingPath,
+        `${JSON.stringify({
+          verificationType: normalizedType,
+          record,
+        })}\n`,
+        'utf8'
+      );
+
+      const flushResult = await flushOrQueue(reportPath);
+
+      return {
+        reportPath,
+        pendingPath,
+        record,
+        ...flushResult,
+      };
+    });
+  });
+
+  writeQueue = operation.catch(() => {});
   return operation;
 }
 
 module.exports = {
-  DEFAULT_REPORT_PATH,
   initializeSubmissionReport,
   appendSubmissionRecord,
-  createSubmissionRecord,
-  getErrorType,
-  getSubmissionReportPath,
-  flushPendingRecords,
 };

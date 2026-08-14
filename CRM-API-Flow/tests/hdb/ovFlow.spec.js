@@ -1,13 +1,12 @@
 const { test, expect } = require('@playwright/test');
-const { mediaDownloader } = require('../../src/core/media/mediaDownloader');
 const {
-  findManualRvAttachments,
+  findManualAttachments,
 } = require('../../src/core/media/mediaHelper');
-const { saveApiResponse } = require('../../src/core/helpers/apiResponseHandler');
 const {
   fetchCrmCustomerDetails,
   fetchCrmVerificationList,
   getLastEightDaysDateRange,
+  normalizeVbStatus,
   updateTokenStatus,
 } = require('../../src/core/helpers/crmApiHelper');
 const {
@@ -232,7 +231,8 @@ function getOvScenario(statusText) {
     return OV_SCENARIOS.NO_SUCH_ADDRESS_FOUND;
   } else if (
     status === 'entry restricted' ||
-    status === 'entry not allowed'
+    status === 'entry not allowed' ||
+    status === 'refused details'
   ) {
     return OV_SCENARIOS.ENTRY_NOT_ALLOWED;
   } else if ([
@@ -431,7 +431,7 @@ test('HDB OV Flow', async ({ page }) => {
   });
 
   console.log(
-    `Submission CSV initialized at: ${submissionReportPath}`
+    `Submission workbook initialized at: ${submissionReportPath}`
   );
 
   page.on('console', msg => {
@@ -455,7 +455,7 @@ test('HDB OV Flow', async ({ page }) => {
     dateTo: endDate,
     dumpType: 'all',
     callType: 'list',
-    status: 'pending',
+    // status: 'pending',
     addType: 'ov',
   };
 
@@ -472,14 +472,14 @@ test('HDB OV Flow', async ({ page }) => {
 
   if (ovItems.length === 0) {
     console.log(
-      'CRM list API returned 0 pending OV entries. ' +
+      'CRM list API returned 0 OV entries. ' +
       'Skipping bank portal login.'
     );
     return;
   }
 
   console.log(
-    `CRM list API ready. Pending OV entries: ${ovItems.length}`
+    `CRM list API ready. OV entries: ${ovItems.length}`
   );
 
   // STEP 2: OPEN BANK PORTAL ONCE
@@ -500,11 +500,16 @@ test('HDB OV Flow', async ({ page }) => {
   let processedCount = 0;
   let failedCount = 0;
   let skippedCount = 0;
+  const duplicateCandidateItems = ovItems.map(item =>
+    normalizeVbStatus(item?.vb_status) === 'pending'
+      ? item
+      : null
+  );
   const {
     duplicateTokenIds,
     skippedItems: skippedDuplicateItems,
   } = createDuplicateSelection(
-    ovItems,
+    duplicateCandidateItems,
     ovListResponse.duplicates
   );
 
@@ -516,7 +521,8 @@ test('HDB OV Flow', async ({ page }) => {
     const addType = String(listItem.addtype || '')
       .trim()
       .toLowerCase();
-    const vbStatus = String(listItem.vb_status ?? '').trim();
+    const rawVbStatus = String(listItem.vb_status ?? '').trim();
+    const vbStatus = normalizeVbStatus(rawVbStatus);
     const finalRecommendation = String(
       listItem.final_recommendation || ''
     ).trim();
@@ -568,7 +574,16 @@ test('HDB OV Flow', async ({ page }) => {
         throw error;
       }
 
-      if (vbStatus === '1') {
+      if (!vbStatus) {
+        const error = new Error(
+          `Token ${tokenId} has unsupported vb_status ` +
+          `${rawVbStatus || 'empty'}. Expected pending, completed, or failed.`
+        );
+        error.category = 'MISSING_DATA';
+        throw error;
+      }
+
+      if (vbStatus === 'completed') {
         const error = new Error(
           `Token ${tokenId} was already submitted ` +
           `(vb_status=${vbStatus}).`
@@ -576,7 +591,24 @@ test('HDB OV Flow', async ({ page }) => {
         error.category = 'ALREADY_SUBMITTED';
         automationStatus = 'SKIPPED_ALREADY_SUBMITTED';
         submissionError = error;
-        mappedData.statusDetail = 'Already submitted (vb_status=1)';
+        mappedData.statusDetail =
+          'Already submitted (vb_status=completed)';
+        skippedCount++;
+
+        console.log(
+          `[${error.category}] ${error.message} Skipping bank flow.`
+        );
+        continue;
+      }
+
+      if (vbStatus === 'failed') {
+        const error = new Error(
+          `Token ${tokenId} has vb_status=failed.`
+        );
+        error.category = 'FAILED_VERIFICATION_STATUS';
+        automationStatus = 'SKIPPED_FAILED_STATUS';
+        submissionError = error;
+        mappedData.statusDetail = 'Skipped: vb_status=failed';
         skippedCount++;
 
         console.log(
@@ -602,7 +634,7 @@ test('HDB OV Flow', async ({ page }) => {
           'Skipping bank flow.'
         );
 
-        // The finally block records this skipped duplicate in the CSV.
+        // The finally block records this skipped duplicate in the workbook.
         continue;
       }
 
@@ -628,14 +660,6 @@ test('HDB OV Flow', async ({ page }) => {
       console.log(
         `Successfully fetched details for ${tokenId}`
       );
-
-      // raw api response
-      saveApiResponse(
-        tokenId,
-        detailsData,
-        true
-      );
-
       mappedData = mapOVCRMData(
         tokenId,
         detailsData
@@ -651,23 +675,6 @@ test('HDB OV Flow', async ({ page }) => {
         );
       }
 
-      saveApiResponse(
-        tokenId,
-        mappedData
-      );
-
-      const downloadedMedia = await mediaDownloader(
-        page.request,
-        tokenId,
-        detailsData,
-        {
-          bank: 'HDB',
-          crmBaseUrl: baseUrl,
-          verificationType: 'OV',
-          minimumImages: 2,
-        }
-      );
-
       const scenario = getOvScenario(mappedData.status);
 
       if (!scenario) {
@@ -676,6 +683,31 @@ test('HDB OV Flow', async ({ page }) => {
         );
         unsupportedStatusError.category = 'UNSUPPORTED_STATUS';
         throw unsupportedStatusError;
+      }
+
+      const manualAttachments = await findManualAttachments(
+        tokenId,
+        'ov'
+      );
+
+      if (manualAttachments.length === 0) {
+        const missingAttachmentError = new Error(
+          `No manual OV image was found for token ${tokenId} ` +
+          `in the attachments folder.`
+        );
+        missingAttachmentError.category = 'MISSING_DOCUMENT';
+        automationStatus = 'SKIPPED_MISSING_DOCUMENT';
+        submissionError = missingAttachmentError;
+        mappedData.statusDetail =
+          'Skipped: manual OV attachment is missing';
+        skippedCount++;
+
+        console.warn(
+          `[${missingAttachmentError.category}] ` +
+          `${missingAttachmentError.message} ` +
+          `Skipping bank form fill and submission.`
+        );
+        continue;
       }
 
       console.log('Scenario:', scenario);
@@ -689,47 +721,37 @@ test('HDB OV Flow', async ({ page }) => {
       );
 
       if (scenario === OV_SCENARIOS.APPLICANT_AVAILABLE) {
-        await fillApplicantAvailable(bankPage, mappedData, downloadedMedia);
-        // console.log('applicant available');
+        await fillApplicantAvailable(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.APPLICANT_NOT_AVAILABLE) {
-        await fillApplicantNotAvailable(bankPage, mappedData, downloadedMedia);
-        // console.log('applicant not available');
+        await fillApplicantNotAvailable(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.DOOR_LOCKED) {
-        await fillDoorLocked(bankPage, mappedData, downloadedMedia);
-        // console.log('Door locked');
+        await fillDoorLocked(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.NO_SUCH_PERSON_STAYING) {
-        await fillNoPersonStaying(bankPage, mappedData, downloadedMedia);
-        console.log('No such person staying');
+        await fillNoPersonStaying(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.NO_SUCH_ADDRESS_FOUND) {
-        await fillNoSuchAddressFound(bankPage, mappedData, downloadedMedia);
-        console.log('No such address found');
+        await fillNoSuchAddressFound(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.ENTRY_NOT_ALLOWED) {
-        await fillEntryNotAllowed(bankPage, mappedData, downloadedMedia);
-        console.log('Entry not allowed');
+        await fillEntryNotAllowed(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.LOAN_CANCELED) {
-        // await fillLoanCanceled(bankPage, mappedData, downloadedMedia);
-        console.log('Loan canceled');
+        await fillLoanCanceled(bankPage, mappedData, manualAttachments);
       } else if (scenario === OV_SCENARIOS.NO_SUCH_OFFICE) {
-        // await fillNoSuchOffice(bankPage, mappedData, downloadedMedia);
-        console.log('No such office');
+        await fillNoSuchOffice(bankPage, mappedData, manualAttachments);
       }
 
       // update token status to completed
       try {
-        // const responseData = await updateTokenStatus(
-        //   page.request,
-        //   tokenId,
-        //   {
-        //     baseUrl,
-        //   }
-        // );
+        await updateTokenStatus(
+          page.request,
+          tokenId,
+          {
+            baseUrl,
+            rdStatus: 'completed',
+          }
+        );
 
         processedCount++;
         automationStatus = 'SUCCESS';
 
-        // console.log(
-        //   `API response: ${JSON.stringify(responseData)}`
-        // );
       } catch (error) {
         error.category =
           error.category || 'STATUS_UPDATE_ERROR';
@@ -758,6 +780,32 @@ test('HDB OV Flow', async ({ page }) => {
         failedCount++;
       }
 
+      if (tokenId && vbStatus === 'pending') {
+        try {
+          await updateTokenStatus(
+            page.request,
+            tokenId,
+            {
+              baseUrl,
+              rdStatus: 'failed',
+            }
+          );
+          mappedData.statusDetail = [
+            mappedData.statusDetail,
+            'CRM vb_status updated to failed',
+          ].filter(Boolean).join(' | ');
+        } catch (statusError) {
+          mappedData.statusDetail = [
+            mappedData.statusDetail,
+            `Failed to update CRM vb_status: ${statusError.message}`,
+          ].filter(Boolean).join(' | ');
+          console.error(
+            `Failed to mark token ${tokenId} as failed: ` +
+            statusError.message
+          );
+        }
+      }
+
       console.error(
         `[${error.category || 'UNKNOWN_ERROR'}] ` +
         `Token ${tokenId}: ${error.message}`
@@ -769,22 +817,23 @@ test('HDB OV Flow', async ({ page }) => {
       try {
         const {
           reportPath,
-          storedInCsv,
+          storedInWorkbook,
           pendingPath,
         } = await appendSubmissionRecord({
+          verificationType: 'OV',
           crmData: mappedData,
           automationStatus,
           error: submissionError,
           reportPath: submissionReportPath,
         });
 
-        if (storedInCsv) {
+        if (storedInWorkbook) {
           console.log(
             `Submission result saved to: ${reportPath}`
           );
         } else {
           console.warn(
-            `CSV is locked. Submission result queued at: ${pendingPath}`
+            `Workbook is locked. Submission result queued at: ${pendingPath}`
           );
         }
       } catch (logError) {

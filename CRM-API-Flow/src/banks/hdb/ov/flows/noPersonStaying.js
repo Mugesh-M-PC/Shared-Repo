@@ -13,7 +13,7 @@ const {
   getOVRecommendation,
 } = require('../form/formHelper');
 const {
-  uploadAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbOvMapping');
 
@@ -62,7 +62,7 @@ function getApplicantVerificationSource(crm) {
     .join(' - ');
 }
 
-async function fillNoPersonStaying(formPage, crm, downloadedMedia) {
+async function fillNoPersonStaying(formPage, crm, manualAttachments) {
   const baseComments =
     crm.tlComments ||
     crm.additionalComments ||
@@ -182,7 +182,7 @@ async function fillNoPersonStaying(formPage, crm, downloadedMedia) {
     formPage,
     map.applicantNameVerifiedFrom,
     getApplicantVerificationSource(crm) ||
-      DEFAULT_VALUES.applicantNameVerifiedFrom
+    DEFAULT_VALUES.applicantNameVerifiedFrom
   );
 
   // Designation <- Met Person Desig.
@@ -269,8 +269,8 @@ async function fillNoPersonStaying(formPage, crm, downloadedMedia) {
     formPage,
     map.negativeFeedback,
     crm.negativeCaseReason ||
-      crm.additionalComments ||
-      DEFAULT_VALUES.negativeFeedback
+    crm.additionalComments ||
+    DEFAULT_VALUES.negativeFeedback
   );
 
   // =========================================================
@@ -316,7 +316,7 @@ async function fillNoPersonStaying(formPage, crm, downloadedMedia) {
   // Block 10: Attachments and first save
   // =========================================================
 
-  await uploadAttachments(formPage, downloadedMedia);
+  await uploadManualAttachments(formPage, manualAttachments);
 
   let saveAlertMessage = null;
   const dialogHandler = async dialog => {
@@ -326,11 +326,11 @@ async function fillNoPersonStaying(formPage, crm, downloadedMedia) {
   };
 
   formPage.on('dialog', dialogHandler);
-  try {
-    await safeSubmitClick(formPage, map.dynamicFormSave, 'Dynamic Form Save');
-  } finally {
-    formPage.off('dialog', dialogHandler);
-  }
+  // try {
+  //   await safeSubmitClick(formPage, map.dynamicFormSave, 'Dynamic Form Save');
+  // } finally {
+  //   formPage.off('dialog', dialogHandler);
+  // }
 
   if (!saveAlertMessage) {
     console.log('No alert appeared after Dynamic Form Save.');
@@ -352,7 +352,18 @@ async function fillNoPersonStaying(formPage, crm, downloadedMedia) {
     recommendation.finalResult || DEFAULT_VALUES.finalResult
   );
   await safeFill(formPage, map.remarks2, crm.remarks);
-  await safeSubmitClick(formPage, map.saveAndProceed, 'Save And Proceed');
+  await safeSubmitClick(
+    formPage,
+    map.dynamicFormSave,
+    'Dynamic Form Save'
+  );
+
+  await safeSubmitClick(
+    formPage,
+    map.saveAndProceed,
+    'Save And Proceed'
+  );
+
 }
 
 module.exports = {

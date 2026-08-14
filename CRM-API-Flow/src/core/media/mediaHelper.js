@@ -18,15 +18,35 @@ function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function findManualRvAttachments(
+function normalizeVerificationType(verificationType) {
+    const normalizedType = String(verificationType || '')
+        .trim()
+        .toLowerCase();
+
+    if (!['rv', 'ov'].includes(normalizedType)) {
+        const error = new Error(
+            'Verification type must be either RV or OV.'
+        );
+        error.category = 'MISSING_CONFIGURATION';
+        throw error;
+    }
+
+    return normalizedType;
+}
+
+async function findManualAttachments(
     tokenId,
+    verificationType,
     options = {}
 ) {
     const normalizedTokenId = String(tokenId || '').trim();
+    const normalizedType = normalizeVerificationType(
+        verificationType
+    );
 
     if (!normalizedTokenId) {
         const error = new Error(
-            'Token ID is required to find manual RV attachments.'
+            'Token ID is required to find manual attachments.'
         );
         error.category = 'MISSING_DATA';
         throw error;
@@ -56,7 +76,7 @@ async function findManualRvAttachments(
 
     const fileNamePattern = new RegExp(
         `^${escapeRegExp(normalizedTokenId)}` +
-        `[-_]rv(?:[-_](\\d+))?$`,
+        `[-_]${normalizedType}(?:[-_](\\d+))?$`,
         'i'
     );
     const matchingFiles = directoryEntries
@@ -89,7 +109,8 @@ async function findManualRvAttachments(
         );
 
     console.log(
-        `Found ${matchingFiles.length} manual RV image(s) for ` +
+        `Found ${matchingFiles.length} manual ` +
+        `${normalizedType.toUpperCase()} image(s) for ` +
         `token ${normalizedTokenId} in ${attachmentsDirectory}`
     );
 
@@ -136,8 +157,6 @@ async function uploadAttachments(
         );
     }
 
-    // console.log('Available attachment paths before upload:', absolutePaths);
-
     if (absolutePaths.length < minimumFiles) {
         const error = new Error(
             `At least ${minimumFiles} attachment files are required, ` +
@@ -162,7 +181,7 @@ async function uploadAttachments(
     return absolutePaths;
 }
 
-async function uploadManualRvAttachments(
+async function uploadManualAttachments(
     page,
     manualAttachments,
     options = {}
@@ -178,7 +197,6 @@ async function uploadManualRvAttachments(
 }
 
 module.exports = {
-    findManualRvAttachments,
-    uploadAttachments,
-    uploadManualRvAttachments,
+    findManualAttachments,
+    uploadManualAttachments,
 };

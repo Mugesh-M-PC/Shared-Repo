@@ -122,6 +122,23 @@ function normalizeCrmDate(value, fieldName) {
   return normalized;
 }
 
+const VB_STATUS_ALIASES = Object.freeze({
+  '0': 'pending',
+  '1': 'completed',
+  pending: 'pending',
+  completed: 'completed',
+  submitted: 'completed',
+  failed: 'failed',
+});
+
+function normalizeVbStatus(value) {
+  const normalizedStatus = String(value ?? '')
+    .trim()
+    .toLowerCase();
+
+  return VB_STATUS_ALIASES[normalizedStatus] || null;
+}
+
 function getLastEightDaysDateRange(referenceDate = new Date()) {
   const endDateValue = new Date(referenceDate);
 
@@ -258,13 +275,6 @@ async function fetchCrmVerificationList(
     );
   }
 
-  if (!addType) {
-    throw createCrmApiError(
-      'MISSING_CONFIGURATION',
-      'CRM addType is required.'
-    );
-  }
-
   const apiUrl = new URL(
     getCrmApiUrl(baseUrl, 'custdetails.php')
   );
@@ -276,7 +286,9 @@ async function fetchCrmVerificationList(
   if (status) {
     apiUrl.searchParams.set('status', status);
   }
-  apiUrl.searchParams.set('addtype', addType);
+  if (addType) {
+    apiUrl.searchParams.set('addtype', addType);
+  }
 
   let response;
 
@@ -362,12 +374,14 @@ async function updateTokenStatus(
     baseUrl,
     timeout,
   } = getCrmRequestConfig(options);
-  const rdStatus = Number(options.rdStatus ?? 1);
+  const rdStatus = String(options.rdStatus || 'completed')
+    .trim()
+    .toLowerCase();
 
-  if (![0, 1].includes(rdStatus)) {
+  if (!['pending', 'completed', 'failed'].includes(rdStatus)) {
     throw createCrmApiError(
       'MISSING_CONFIGURATION',
-      'CRM rdStatus must be either 0 (pending) or 1 (submitted).'
+      'CRM rdStatus must be pending, completed, or failed.'
     );
   }
 
@@ -434,5 +448,6 @@ module.exports = {
   fetchCrmCustomerDetails,
   fetchCrmVerificationList,
   getLastEightDaysDateRange,
+  normalizeVbStatus,
   updateTokenStatus,
 };

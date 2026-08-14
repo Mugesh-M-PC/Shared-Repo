@@ -23,7 +23,7 @@ const {
     fillNoSuchOffice,
 } = require('./flows/NoSuchOffice');
 
-async function fillOVForm(formPage, crm, downloadedMedia) {
+async function fillOVForm(formPage, crm, manualAttachments) {
     const normalizedStatus = String(crm.status || '')
         .trim()
         .toLowerCase();
@@ -33,21 +33,21 @@ async function fillOVForm(formPage, crm, downloadedMedia) {
             return fillApplicantAvailable(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'applicant not available':
             return fillApplicantNotAvailable(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'door locked':
             return fillDoorLocked(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'entry restricted':
@@ -55,21 +55,21 @@ async function fillOVForm(formPage, crm, downloadedMedia) {
             return fillEntryNotAllowed(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'no such address found':
             return fillNoSuchAddressFound(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'no such office':
             return fillNoSuchOffice(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'no such person working':
@@ -77,7 +77,7 @@ async function fillOVForm(formPage, crm, downloadedMedia) {
             return fillNoPersonStaying(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         case 'loan cancelled / not applied':
@@ -87,7 +87,7 @@ async function fillOVForm(formPage, crm, downloadedMedia) {
             return fillLoanCanceled(
                 formPage,
                 crm,
-                downloadedMedia
+                manualAttachments
             );
 
         default:

@@ -17,13 +17,12 @@ const {
   getOVExteriorValue,
   getOVInteriorValue,
   getBusinessActivityValue,
-  getOfficeAssetValues,
   getAreaOfOfficeValue,
   getYesNoBoolean,
-  getFinalResultValue,
+  getOVRecommendation,
 } = require('../form/formHelper');
 const {
-  uploadAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbOvMapping');
 
@@ -65,7 +64,7 @@ const DEFAULT_VALUES = Object.freeze({
   finalResult: '2'
 });
 
-async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
+async function fillNoSuchAddressFound(formPage, crm, manualAttachments) {
   const comments =
     crm.tlComments ||
     crm.additionalComments ||
@@ -216,10 +215,6 @@ async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
     `input[type="radio"][name="uiComponents[1].formFieldVOList[12].value[0]"][value="${activityValue}"]`
   );
 
-  // const itemValues = getOfficeAssetValues(crm.assetsSeen);
-  // const selectedItemValues = itemValues.length > 0
-  //   ? itemValues
-  //   : DEFAULT_VALUES.itemsSighted;
   const selectedItemValues = DEFAULT_VALUES.itemsSighted;
   await safeSelectByValue(
     formPage,
@@ -289,12 +284,15 @@ async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
   // Block 8: Recommendation
   // =========================================================
 
-  const cpvResult = getYesNoBoolean(crm.finalRecommendation);
-  cpvResult ?
+  const recommendation = getOVRecommendation(
+    crm.finalRecommendation
+  );
+  const cpvPositive = recommendation.cpvPositive === true;
+  cpvPositive ?
     await safeClick(formPage, map.cpvResultPositive) :
     await safeClick(formPage, map.cpvResultNegative);
 
-  cpvResult && await safeSelectByValue(
+  !cpvPositive && await safeSelectByValue(
     formPage,
     map.cpvRejectedReasons,
     DEFAULT_VALUES.cpvRejectedReasons
@@ -321,38 +319,10 @@ async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
   await safeFill(formPage, map.remarks1, crm.remarks);
 
   // =========================================================
-  // Block 10: Attachments and first save
+  // Block 10: Attachments
   // =========================================================
 
-  await uploadAttachments(formPage, downloadedMedia);
-
-  // =========================================================
-  // Save the dynamic form before filling the final-decision form.
-  // =========================================================
-  let saveAlertMessage = null;
-  const dialogHandler = async dialog => {
-    saveAlertMessage = dialog.message();
-    console.log(
-      'Alert appeared after Dynamic Form Save:',
-      saveAlertMessage
-    );
-    await dialog.accept();
-  };
-
-  formPage.on('dialog', dialogHandler);
-  try {
-    await safeSubmitClick(
-      formPage,
-      map.dynamicFormSave,
-      'Dynamic Form Save'
-    );
-  } finally {
-    formPage.off('dialog', dialogHandler);
-  }
-
-  if (!saveAlertMessage) {
-    console.log('No alert appeared after Dynamic Form Save.');
-  }
+  await uploadManualAttachments(formPage, manualAttachments);
 
   // =========================================================
   // Block 11: Final decision and submission
@@ -369,7 +339,7 @@ async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
     DEFAULT_VALUES.verificationAgent
   );
   const finalResultValue =
-    getFinalResultValue(crm.finalRecommendation) ||
+    recommendation.finalResult ||
     DEFAULT_VALUES.finalResult;
   await safeSelectByValue(
     formPage,
@@ -377,6 +347,20 @@ async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
     finalResultValue
   );
   await safeFill(formPage, map.remarks2, crm.remarks);
+
+  formPage.once('dialog', async dialog => {
+    console.log(
+      'Alert appeared after Dynamic Form Save:',
+      dialog.message()
+    );
+    await dialog.accept();
+  });
+
+  await safeSubmitClick(
+    formPage,
+    map.dynamicFormSave,
+    'Dynamic Form Save'
+  );
 
   await safeSubmitClick(
     formPage,

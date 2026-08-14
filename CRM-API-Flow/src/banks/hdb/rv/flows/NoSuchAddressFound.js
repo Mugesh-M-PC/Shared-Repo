@@ -21,15 +21,14 @@ const {
   getEarningMemberRadioValue,
   getRequiredVerifierComments,
 } = require('../form/formHelper');
-const { uploadAttachments } = require('../../../../core/media/mediaHelper');
 const {
-  uploadManualRvAttachments,
+  uploadManualAttachments,
 } = require('../../../../core/media/mediaHelper');
 const map = require('../mappings/hdbRvMapping');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
+async function fillNoSuchAddressFound(formPage, crm, manualAttachments) {
   const comments = getRequiredVerifierComments(crm);
 
   // Block 1
@@ -146,13 +145,8 @@ async function fillNoSuchAddressFound(formPage, crm, downloadedMedia) {
   await safeFill(formPage, map.remarks1, crm.remarks);
 
   // Block 8
-  // const attachmentPaths = downloadedMedia
-  //   .map(item => item.path)
-  //   .filter(Boolean);
-  // await uploadAttachments(formPage, attachmentPaths);
-
-  await uploadManualRvAttachments(
-    formPage, downloadedMedia
+  await uploadManualAttachments(
+    formPage, manualAttachments
   );
 
   // save first part
