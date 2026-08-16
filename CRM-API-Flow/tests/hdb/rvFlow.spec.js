@@ -304,7 +304,7 @@ async function openResidenceVerification(bankPage, loanNo, cName) {
       ]);
 
     if (
-      verificationType.trim() === 'Residence Verification' &&
+      verificationType.trim().toLowerCase() === 'residence verification' &&
       rowApplicationNumber.trim() === applicationNumber
     ) {
       candidateRowIndexes.push(rowIndex);
@@ -529,6 +529,9 @@ test('HDB RV Flow', async ({ page }) => {
       address: String(listItem.address || '').trim(),
       pinCode: String(listItem.pincode || '').trim(),
       agentID: String(listItem.agentid || '').trim(),
+      status: String(
+        listItem.status || listItem.Status || ''
+      ).trim(),
       finalRecommendation,
     };
 

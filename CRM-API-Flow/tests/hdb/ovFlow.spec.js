@@ -319,7 +319,7 @@ async function openOfficeVerification(bankPage, loanNo, cName) {
       ]);
 
     if (
-      verificationType.trim() === 'Office Verification' &&
+      verificationType.trim().toLowerCase() === 'business verification' &&
       rowApplicationNumber.trim() === applicationNumber
     ) {
       candidateRowIndexes.push(rowIndex);
@@ -400,7 +400,7 @@ async function openOfficeVerification(bankPage, loanNo, cName) {
 
   await expect(
     matchingRow.locator('td:nth-child(2)')
-  ).toHaveText('Office Verification');
+  ).toHaveText('Business Verification');
 
   await expect(
     matchingRow.locator('td:nth-child(3)')
@@ -409,7 +409,7 @@ async function openOfficeVerification(bankPage, loanNo, cName) {
   console.log(`Opening application ${applicationNumber}...`);
 
   // await matchingRow
-  //   .getByRole('link', { name: 'Office Verification' })
+  //   .getByRole('link', { name: 'Business Verification' })
   //   .click();
 
   await matchingRow.locator('td:nth-child(2) a').click();
@@ -545,6 +545,9 @@ test('HDB OV Flow', async ({ page }) => {
       address: String(listItem.address || '').trim(),
       pinCode: String(listItem.pincode || '').trim(),
       agentID: String(listItem.agentid || '').trim(),
+      status: String(
+        listItem.status || listItem.Status || ''
+      ).trim(),
       finalRecommendation,
     };
 

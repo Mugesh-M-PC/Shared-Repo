@@ -512,7 +512,7 @@ function getOVRecommendation(value) {
 
     if (finalResult === '3') {
         return {
-            cpvPositive: null,
+            cpvPositive: false,
             finalResult,
         };
     }
