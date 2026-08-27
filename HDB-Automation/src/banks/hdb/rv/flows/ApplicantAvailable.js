@@ -1,0 +1,347 @@
+const {
+  safeFill,
+  safeClick,
+  safeCheck,
+  safeSelectByValue,
+  safeSubmitClick,
+  safeSubmitClickAndAcceptDialog,
+  verifyAndRefillFormFields,
+} = require('../../../../core/helpers/formFiller');
+const {
+  getAddressConfirmBoolean,
+  getYesNoBoolean,
+  getFinalResultValue,
+  getInteriorValue,
+  getExteriorValue,
+  getResidenceConstructionValue,
+  getLocalityValue,
+  getTypeOfResidenceValue,
+  getEaseOfLocateValue,
+  getLandmarkValue,
+  getResidenceStatusValue,
+  getAreaSqFtRadioValue,
+  getRequiredVerifierComments,
+  sanitizeNumericOnly,
+  sanitizeStringOnly,
+  computeYearsAtResidence,
+  computeYearsInCity,
+} = require('../form/formHelper');
+const {
+  uploadManualAttachments,
+} = require('../../../../core/media/mediaHelper');
+const map = require('../mappings/hdbRvMapping');
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const DEFAULT_VALUES = Object.freeze({
+  personMet: 'Applicant',
+  relation: 'Applicant',
+  dependents: '1',
+  familyMembers: '1',
+  spouseWorking: false,
+  spouseWorkingDescription: 'NA',
+  earningMembers: '1',
+  yearsInCity: '1',
+  yearsAtResidence: '1',
+  addressConfirmed: true,
+  earningMember: '03', // Father
+  // dateTimeVisit: '',
+  latitude: '0',
+  longitude: '0',
+  residenceStatus: 'Owned',
+  permanentAddress: 'NA',
+  contactPerson: 'NA',
+  // telephoneNumber: '',
+  rentPerMonth: '0',
+  areaSqFt: '02', // <400 sq. ft.
+  easeOfLocate: '02', // Easy
+  landmark: 'NA',
+  typeOfResidence: '03', // Independent house
+  locality: '02', // Middle class
+  areaOfResidence: '02', // Non-negative area
+  residenceConstruction: '01', // Pukka
+  exterior: '01', // Average
+  interior: '01', // Average
+  nameOfPerson: 'NA',
+  applicantDetailsConfirmed: false,
+  residenceLocked: false,
+  negativeFeedback: 'NA',
+  // verifierName: '',
+  verifierComments: 'Details Verfied',
+  cpvRejectedReasons: '03',
+  remarks: 'NA',
+  noOfAttempts: '1',
+  verificationAgent: '5003006', // BANRAD FINSERVE
+  finalResult: '1', // Positive
+});
+
+async function fillApplicantAvailable(formPage, crm, manualAttachments) {
+
+  const comments = getRequiredVerifierComments(
+    crm,
+    DEFAULT_VALUES.verifierComments
+  );
+
+  // Block 1
+  await safeFill(
+    formPage,
+    map.personMet,
+    sanitizeStringOnly(crm.customerName, DEFAULT_VALUES.personMet)
+  );
+  await safeFill(formPage, map.relation, sanitizeStringOnly(crm.relation, DEFAULT_VALUES.relation));
+  await safeFill(formPage, map.dependents, sanitizeNumericOnly(crm.dependents, DEFAULT_VALUES.dependents));
+  await safeFill(
+    formPage,
+    map.noOfFamilyMembers,
+    sanitizeNumericOnly(crm.totalMembers, DEFAULT_VALUES.familyMembers)
+  );
+  await safeClick(
+    formPage,
+    DEFAULT_VALUES.spouseWorking ? map.spouseWorkingYes : map.spouseWorkingNo
+  );
+  await safeFill(
+    formPage,
+    map.noOfEarningMembers,
+    sanitizeNumericOnly(crm.earningMembers, DEFAULT_VALUES.earningMembers)
+  );
+  await safeFill(
+    formPage,
+    map.spouseWorkingDesc,
+    sanitizeStringOnly(DEFAULT_VALUES.spouseWorkingDescription)
+  );
+  const yearsAtRes =
+    computeYearsAtResidence(crm.resiStab, crm.duration) ||
+    DEFAULT_VALUES.yearsAtResidence;
+  const yearsInCity =
+    computeYearsInCity(crm.resiStab, crm.duration) ||
+    DEFAULT_VALUES.yearsInCity;
+  await safeFill(formPage, map.yearsCity, sanitizeNumericOnly(yearsInCity, DEFAULT_VALUES.yearsInCity));
+  await safeFill(formPage, map.yearsResidence, sanitizeNumericOnly(yearsAtRes, DEFAULT_VALUES.yearsAtResidence));
+  await safeClick(
+    formPage,
+    DEFAULT_VALUES.addressConfirmed ? map.addressConfirmYes : map.addressConfirmNo
+  );
+  const earningMemberValue = DEFAULT_VALUES.earningMember;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[0].formFieldVOList[10].value[0]"][value="${earningMemberValue}"]`
+  );
+
+  await safeFill(
+    formPage,
+    map.dateTimeVisit,
+    crm.postTimestamp
+  );
+
+  // Block 2
+  await safeFill(formPage, map.latitude, sanitizeNumericOnly(crm.latitude, DEFAULT_VALUES.latitude, {
+    allowDecimal: true,
+    allowNegative: true,
+  }));
+  await safeFill(formPage, map.longitude, sanitizeNumericOnly(crm.longitude, DEFAULT_VALUES.longitude, {
+    allowDecimal: true,
+    allowNegative: true,
+  }));
+
+  // Block 3
+  const residenceStatusValue = crm.ownershipType
+    ? getResidenceStatusValue(crm.ownershipType)
+    : DEFAULT_VALUES.residenceStatus;
+  await safeCheck(
+    formPage,
+    `#Residence_Status input[type="radio"][name="uiComponents[2].formFieldVOList[0].value[0]"][value="${residenceStatusValue}"]`
+  );
+
+  // Block 4
+  await safeFill(formPage, map.permanentAddress, DEFAULT_VALUES.permanentAddress);
+  await safeFill(
+    formPage,
+    map.contactPerson,
+    sanitizeStringOnly(crm.tpcName, DEFAULT_VALUES.contactPerson)
+  );
+  await safeFill(
+    formPage,
+    map.telephoneNumber,
+    sanitizeNumericOnly(crm.phone, crm.alternateNo)
+  );
+  await safeFill(formPage, map.rentPerMonth, DEFAULT_VALUES.rentPerMonth);
+  const areaSqFtValue = crm.areaSqft
+    ? getAreaSqFtRadioValue(crm.areaSqft)
+    : DEFAULT_VALUES.areaSqFt;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[3].formFieldVOList[4].value[0]"][value="${areaSqFtValue}"]`
+  );
+
+  // Block 5
+  const easeOfLocateValue = crm.traceability
+    ? getEaseOfLocateValue(crm.traceability)
+    : DEFAULT_VALUES.easeOfLocate;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[0].value[0]"][value="${easeOfLocateValue}"]`
+  );
+  await safeFill(
+    formPage,
+    map.landmark,
+    sanitizeStringOnly(
+      getLandmarkValue(crm.landmark),
+      DEFAULT_VALUES.landmark
+    )
+  );
+  const typeOfResidenceValue = crm.residenceType
+    ? getTypeOfResidenceValue(crm.residenceType)
+    : DEFAULT_VALUES.typeOfResidence;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[2].value[0]"][value="${typeOfResidenceValue}"]`
+  );
+  const localityValue = crm.locality
+    ? getLocalityValue(crm.locality)
+    : DEFAULT_VALUES.locality;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[3].value[0]"][value="${localityValue}"]`
+  );
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[4].value[0]"][value="${localityValue === '04' ? '01' : DEFAULT_VALUES.areaOfResidence}"]`
+  );
+  const residenceConstructionValue = crm.residenceType
+    ? getResidenceConstructionValue(crm.residenceType)
+    : DEFAULT_VALUES.residenceConstruction;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[5].value[0]"][value="${residenceConstructionValue}"]`
+  );
+  const exteriorValue = crm.exterior
+    ? getExteriorValue(crm.exterior)
+    : DEFAULT_VALUES.exterior;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[6].value[0]"][value="${exteriorValue}"]`
+  );
+  const interiorValue = crm.interior
+    ? getInteriorValue(crm.interior)
+    : DEFAULT_VALUES.interior;
+  await safeCheck(
+    formPage,
+    `input[type="radio"][name="uiComponents[5].formFieldVOList[7].value[0]"][value="${interiorValue}"]`
+  );
+
+  //  Block 6
+  await safeFill(
+    formPage,
+    map.nameOfPerson,
+    sanitizeStringOnly(crm.tpcName, DEFAULT_VALUES.nameOfPerson)
+  );
+  const applicantDetailsConfirmed = getYesNoBoolean(
+    crm.applNameConfirmed,
+    DEFAULT_VALUES.applicantDetailsConfirmed
+  );
+  // if (applicantDetailsConfirmed) {
+  //   await safeClick(formPage, map.applicantDetailsConfirmedYes);
+  //   await safeClick(
+  //     formPage,
+  //     DEFAULT_VALUES.residenceLocked ? map.residenceLockedYes : map.residenceLockedNo
+  //   );
+  //   await safeFill(formPage, map.negativeFeedback, DEFAULT_VALUES.negativeFeedback);
+  // } else {
+  //   await safeClick(formPage, map.applicantDetailsConfirmedNo);
+  //   await safeClick(
+  //     formPage,
+  //     DEFAULT_VALUES.residenceLocked ? map.residenceLockedYes : map.residenceLockedNo
+  //   );
+  //   await safeFill(
+  //     formPage,
+  //     map.negativeFeedback,
+  //     crm.verifierComments || comments || DEFAULT_VALUES.negativeFeedback
+  //   );
+  // }
+
+  // Block 7
+  await safeFill(
+    formPage,
+    map.verifierName,
+    crm.agentID
+  );
+  const finalResultValue =
+    getFinalResultValue(crm.finalRecommendation) || DEFAULT_VALUES.finalResult;
+  const isCpvPositive = finalResultValue === '1';
+  await safeClick(formPage, isCpvPositive ? map.cpvResultPositive : map.cpvResultNegative);
+  await safeFill(formPage, map.verifierComments, sanitizeStringOnly(DEFAULT_VALUES.verifierComments));
+  if (!isCpvPositive) {
+    await safeSelectByValue(
+      formPage,
+      map.cpvRejectedReasons,
+      DEFAULT_VALUES.cpvRejectedReasons
+    );
+  }
+  if (applicantDetailsConfirmed) {
+    await safeClick(formPage, map.applicantDetailsConfirmedYes);
+    await safeClick(
+      formPage,
+      DEFAULT_VALUES.residenceLocked ? map.residenceLockedYes : map.residenceLockedNo
+    );
+    await safeFill(formPage, map.negativeFeedback, sanitizeStringOnly(DEFAULT_VALUES.negativeFeedback));
+  } else {
+    await safeClick(formPage, map.applicantDetailsConfirmedNo);
+    await safeClick(
+      formPage,
+      DEFAULT_VALUES.residenceLocked ? map.residenceLockedYes : map.residenceLockedNo
+    );
+    // await safeFill(
+    //   formPage,
+    //   map.negativeFeedback,
+    //   crm.verifierComments || comments || DEFAULT_VALUES.negativeFeedback
+    // );
+    await safeFill(
+      formPage,
+      map.negativeFeedback,
+      sanitizeStringOnly(DEFAULT_VALUES.negativeFeedback)
+    );
+  }
+  await safeFill(formPage, map.remarks1, crm.remarks || DEFAULT_VALUES.remarks);
+
+  // Block 8
+  await uploadManualAttachments(
+    formPage, manualAttachments
+  );
+
+  await verifyAndRefillFormFields(formPage, {
+    context: 'RV first-part form',
+    clearAfterSuccess: true,
+  });
+
+  // Save first form
+  await safeSubmitClick(formPage, map.firstPartSave, "First Part Save");
+
+  // Block 9
+  await safeFill(formPage, map.noOfAttempts, DEFAULT_VALUES.noOfAttempts);
+  await safeSelectByValue(
+    formPage,
+    map.verificationAgent,
+    DEFAULT_VALUES.verificationAgent
+  );
+  await safeSelectByValue(formPage, map.verificationResult, finalResultValue);
+  await safeFill(formPage, map.remarks2, crm.remarks || DEFAULT_VALUES.remarks);
+
+  await delay(5000);
+
+  // await safeSubmitClick(formPage, map.dynamicFormSave, "Dynamic Form Save");
+  // await safeSubmitClick(formPage, map.saveAndProceed, "Save And Proceed");
+
+  await verifyAndRefillFormFields(formPage, {
+    context: 'RV final form',
+    clearAfterSuccess: true,
+  });
+
+  await safeSubmitClickAndAcceptDialog(
+    formPage,
+    map.dynamicFormSave,
+    "Dynamic Form Save"
+  );
+  await safeSubmitClick(formPage, map.saveAndProceed, "Save And Proceed");
+}
+
+module.exports = { fillApplicantAvailable };
