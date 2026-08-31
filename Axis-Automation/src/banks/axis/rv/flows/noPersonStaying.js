@@ -1,22 +1,27 @@
 // RV mapper for "No Such Person Staying" using resident/TPC details if present.
 const {
-    NO_SUCH_PERSON_RV_DEFAULTS,
     baseRVMapping,
     clean,
     firstPopulatedField,
     getField,
     getData,
-} = require('./mappingHelpers');
+} = require('../form/formHelper');
+
+const DEFAULT_VALUES = Object.freeze({
+    relationship: 'OTHERS', easeOfLocating: 'EASY',
+    ownershipResidence: 'RENTED', yearsStaying: '0',
+    stayConfirmedBy: 'NEIGHBOUR', typeResidence: 'FLAT',
+});
 
 /** Build portal-ready RV values when the applicant does not stay there. */
 function mapNoSuchPersonStaying(responseBody) {
     const data = getData(responseBody);
     return {
         ...baseRVMapping(data),
-        ...NO_SUCH_PERSON_RV_DEFAULTS,
+        ...DEFAULT_VALUES,
         contacted: clean(firstPopulatedField(data, 'Name of Person Staying')),
         stayConfirmedBy: clean(getField(data, 'TPC Name')) ||
-            NO_SUCH_PERSON_RV_DEFAULTS.stayConfirmedBy,
+            DEFAULT_VALUES.stayConfirmedBy,
     };
 }
 

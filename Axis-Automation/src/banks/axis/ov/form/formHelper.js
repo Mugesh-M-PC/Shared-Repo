@@ -7,26 +7,8 @@ const {
     firstPopulatedField,
     getField,
 } = require('../../shared/fieldHelpers');
-
-// Exact client-supplied values for CRM fields marked as missing. Do not
-// replace these literals with generic NA/blank values.
-const RESTRICTED_OV_DEFAULTS = Object.freeze({
-    employment: 'SALARIED',
-    workingAs: 'OTHERS',
-    workingSince: '0',
-    occupancy: 'RENTED',
-    yearsInBusiness: '0',
-    nature: 'OTHERS',
-    activitySeen: 'NA',
-});
-
-const UNCONFIRMED_OV_DEFAULTS = Object.freeze({
-    ...RESTRICTED_OV_DEFAULTS,
-    contacted: 'NA',
-    designation: 'No - not captured',
-    boardSeen: 'NO',
-    confirmedBy: 'COULD NOT CONFIRM',
-});
+const fieldMap = require('../mappings/axisOvMapping');
+const { questionKeys } = require('./questionnaire');
 
 /** Validate and return the nested DETAILS_API data object. */
 function getData(responseBody) {
@@ -117,9 +99,16 @@ function baseOVMapping(data) {
     };
 }
 
+/** Fill OV controls in portal order through their stable ID mapping. */
+async function fillOVQuestionnaire(axisPage, values) {
+    for (const fieldName of questionKeys) {
+        await axisPage.setQuestionnaireValueBySelector(
+            fieldMap[fieldName], fieldName, values?.[fieldName]
+        );
+    }
+}
+
 module.exports = {
-    RESTRICTED_OV_DEFAULTS,
-    UNCONFIRMED_OV_DEFAULTS,
     baseOVMapping,
     clean,
     combine,
@@ -127,4 +116,5 @@ module.exports = {
     getField,
     getData,
     mapContactedPerson,
+    fillOVQuestionnaire,
 };

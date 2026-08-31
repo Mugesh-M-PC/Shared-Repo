@@ -104,13 +104,9 @@ class AxisProcessRunner {
         // this worker-level use-case coordinator.
         const customerStatus = getCustomerStatus(customerResponse.body);
         const adapter = getVerificationAdapter(addressType);
-        const questionnaireValues = adapter.mapStatus(customerStatus)(
-            customerResponse.body
-        );
-        await adapter.questionnaire.fillQuestionnaire(
-            this.axisPage,
-            questionnaireValues
-        );
+        const crmData = adapter.mapCrmData(customerResponse.body);
+        crmData.status = customerStatus || crmData.status;
+        await adapter.fillForm(this.axisPage, crmData);
 
         await this.axisPage.saveQuestionnaire();
         await this.axisPage.openDocumentManager(addressType);

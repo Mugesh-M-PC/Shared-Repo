@@ -213,7 +213,16 @@ class AxisPage {
 
     /** Fill one input, applying exact/alias/default dropdown selection rules. */
     async setQuestionnaireValue(questionKey, value) {
-        const input = this.questionnaireInput(questionKey);
+        return this.setQuestionnaireValueBySelector(null, questionKey, value);
+    }
+
+    /** Fill one field through its ID mapping with a name-based fallback. */
+    async setQuestionnaireValueBySelector(selector, questionKey, value) {
+        const selectors = [
+            selector,
+            `#questionnaire-form [name="${questionKey}"]`,
+        ].filter(Boolean);
+        const input = this.page.locator(selectors.join(', ')).first();
         await input.waitFor({ state: 'visible' });
 
         const tagName = await input.evaluate((element) =>

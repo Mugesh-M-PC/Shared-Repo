@@ -8,6 +8,12 @@ const EXCLUDED_REMARK_FIELDS = new Set([
 ]);
 const { clean, getField } = require('../../shared/fieldHelpers');
 
+const DEFAULT_VALUES = Object.freeze({
+    contacted: 'NA', relationship: 'OTHERS', easeOfLocating: 'EASY',
+    ownershipResidence: 'RENTED', yearsStaying: '0',
+    stayConfirmedBy: 'COULD NOT CONFIRM', typeResidence: 'FLAT',
+});
+
 /** Parse the CRM visit timestamp into HTML date and time input formats. */
 function parseVisitTimestamp(value) {
     const timestamp = clean(value);
@@ -82,8 +88,8 @@ function buildAgencyRemarks(data) {
 }
 
 /** Build portal-ready RV values when a different person was met. */
-function mapApplicantNotAvailable(responseBody) {
-    const data = getField(responseBody, 'data');
+function mapApplicantNotAvailable(crm) {
+    const data = crm.data;
 
     if (!data || typeof data !== 'object') {
         throw new Error('DETAILS_API response does not contain a data object.');
@@ -96,13 +102,16 @@ function mapApplicantNotAvailable(responseBody) {
     return {
         visitDate,
         visitTime,
-        contacted: clean(getField(data, 'Name of met Person')),
-        relationship: clean(getField(data, 'Relation with App')),
-        easeOfLocating: mapEaseOfLocating(getField(data, 'Traceability')),
-        ownershipResidence: clean(getField(data, 'Own Type')),
-        yearsStaying: numericValue(getField(data, 'Resi Stab')),
-        stayConfirmedBy: clean(getField(data, 'TPC is')),
-        typeResidence: clean(getField(data, 'Type of house')),
+        contacted: crm.personMet || DEFAULT_VALUES.contacted,
+        relationship: crm.relationWithApplicant || DEFAULT_VALUES.relationship,
+        easeOfLocating: mapEaseOfLocating(crm.traceability) ||
+            DEFAULT_VALUES.easeOfLocating,
+        ownershipResidence: crm.ownershipType ||
+            DEFAULT_VALUES.ownershipResidence,
+        yearsStaying: numericValue(crm.residenceStability) ||
+            DEFAULT_VALUES.yearsStaying,
+        stayConfirmedBy: crm.confirmedBy || DEFAULT_VALUES.stayConfirmedBy,
+        typeResidence: crm.residenceType || DEFAULT_VALUES.typeResidence,
         remarks: buildAgencyRemarks(data),
     };
 }

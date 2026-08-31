@@ -65,10 +65,12 @@ narrow CRM boundary.
 
 The bank layer owns portal-specific behavior. `verificationAdapters.js` is the
 only place that selects RV versus OV. Each type exports the same interface from
-its `index.js`: `addressType`, `verificationType`, `mapStatus(status)`, and
-`questionnaire`. New RV/OV scenarios should remain in the matching type folder.
-Shared browser behavior belongs in `portal`; shared mapping behavior belongs in
-`shared`.
+its `index.js`: `addressType`, `verificationType`, `map`, `mapCrmData()`, and
+`fillForm()`. As in HDB, `mappings/crmDataMapper.js` translates inconsistent CRM
+labels into readable properties, `mappings/axis*Mapping.js` contains stable
+portal field IDs, `flows/` owns status routing and scenario defaults, and
+`form/formHelper.js` performs ordered form entry. Shared browser behavior belongs
+in `portal`; shared normalization belongs in `shared`.
 
 Core code is reusable infrastructure. `api` wraps Playwright request calls and
 CRM response parsing, `documents` resolves safe upload paths, and `reporting`
@@ -104,7 +106,10 @@ headed. Set `USE_DYNAMIC_PDF=true` to require
 ## Change guide
 
 - CRM transport or response parsing: `src/core/api`
-- RV/OV scenario: the matching `mappings/statusMappings.js` and mapper
+- RV/OV scenario or default: the matching file under `flows/`
+- CRM field-name translation: the matching `mappings/crmDataMapper.js`
+- Portal field ID: the matching `mappings/axisRvMapping.js` or
+  `mappings/axisOvMapping.js`
 - Questionnaire order or labels: the matching type's `form` folder
 - Shared Axis selectors/browser behavior: `src/banks/axis/portal`
 - Polling, lifecycle, or shutdown: `src/workers/axis`

@@ -1,19 +1,24 @@
 // RV mapper for a cancelled/not-applied loan using client-approved defaults.
 const {
-    CANCELLED_RV_DEFAULTS,
     baseRVMapping,
     clean,
     firstPopulatedField,
     getField,
     getData,
-} = require('./mappingHelpers');
+} = require('../form/formHelper');
+
+const DEFAULT_VALUES = Object.freeze({
+    relationship: 'OTHERS', easeOfLocating: 'EASY',
+    ownershipResidence: 'RENTED', yearsStaying: '0',
+    stayConfirmedBy: 'COULD NOT CONFIRM',
+});
 
 /** Build portal-ready RV values for a cancelled or not-applied case. */
 function mapLoanCancelledNotApplied(responseBody) {
     const data = getData(responseBody);
     return {
         ...baseRVMapping(data),
-        ...CANCELLED_RV_DEFAULTS,
+        ...DEFAULT_VALUES,
         contacted: clean(firstPopulatedField(
             data,
             'Met Person',

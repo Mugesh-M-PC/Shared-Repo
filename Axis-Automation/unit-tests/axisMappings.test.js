@@ -1,8 +1,8 @@
 // Fast unit coverage for sanitizers and every configured RV/OV status family.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getRVStatusMapper } = require('../src/banks/axis/rv/mappings/statusMappings');
-const { getOVStatusMapper } = require('../src/banks/axis/ov/mappings/statusMappings');
+const { getRVStatusMapper } = require('../src/banks/axis/rv');
+const { getOVStatusMapper } = require('../src/banks/axis/ov');
 const {
     sanitizeNumericOnly,
     sanitizeStringOnly,
@@ -159,6 +159,34 @@ test('OV applicant scenarios use all available CRM fields', () => {
     assert.equal(unavailable.contacted, 'Test Visitor Test Met Person');
     assert.equal(unavailable.designation, 'Test Visitor');
     assert.equal(unavailable.confirmedBy, 'Security');
+});
+
+test('applicant flows apply explicit defaults when CRM values are absent', () => {
+    const missing = Object.fromEntries(
+        Object.keys(data)
+            .filter((key) => key === 'POST TIMESTAMP')
+            .map((key) => [key, data[key]])
+    );
+
+    const rv = getRVStatusMapper('Applicant Available')({ data: missing });
+    assertMappedFields(rv, {
+        contacted: 'NA',
+        relationship: 'Applicant/Self',
+        ownershipResidence: 'RENTED',
+        yearsStaying: '0',
+        typeResidence: 'FLAT',
+    });
+
+    const ov = getOVStatusMapper('Applicant Available')({ data: missing });
+    assertMappedFields(ov, {
+        employment: 'SALARIED',
+        contacted: 'NA',
+        workingAs: 'OTHERS',
+        workingSince: '0',
+        occupancy: 'RENTED',
+        yearsInBusiness: '0',
+        activitySeen: 'NA',
+    });
 });
 
 test('OV exception scenarios combine available CRM fields with client defaults', () => {

@@ -12,8 +12,9 @@ test('verification adapters expose one consistent RV/OV contract', () => {
     assert.equal(ov.verificationType, 'OV');
 
     for (const adapter of [rv, ov]) {
-        assert.equal(typeof adapter.mapStatus, 'function');
-        assert.equal(typeof adapter.questionnaire.fillQuestionnaire, 'function');
+        assert.equal(typeof adapter.mapCrmData, 'function');
+        assert.equal(typeof adapter.fillForm, 'function');
+        assert.equal(typeof adapter.map, 'object');
     }
 });
 
@@ -22,4 +23,13 @@ test('verification adapter rejects unknown address types early', () => {
         () => getVerificationAdapter('postal'),
         /Unsupported Axis verification type/
     );
+});
+
+test('RV and OV mappings expose stable ID selectors for every form field', () => {
+    for (const type of ['current', 'office']) {
+        const adapter = getVerificationAdapter(type);
+        for (const fieldName of adapter.questionnaire.questionKeys) {
+            assert.match(adapter.map[fieldName], /^#[A-Za-z][\w:-]*$/);
+        }
+    }
 });

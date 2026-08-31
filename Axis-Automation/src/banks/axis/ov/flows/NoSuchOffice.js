@@ -1,12 +1,17 @@
 // OV mapper for "No Such Office": combine person/designation and TPC details.
 const {
-    RESTRICTED_OV_DEFAULTS,
     baseOVMapping,
     clean,
     getData,
     getField,
     mapContactedPerson,
-} = require('./mappingHelpers');
+} = require('../form/formHelper');
+
+const DEFAULT_VALUES = Object.freeze({
+    employment: 'SALARIED', workingAs: 'OTHERS', workingSince: '0',
+    occupancy: 'RENTED', yearsInBusiness: '0', nature: 'OTHERS',
+    activitySeen: 'NA',
+});
 
 /** Build portal-ready OV values when no office exists at the address. */
 function mapNoSuchOffice(responseBody) {
@@ -14,7 +19,7 @@ function mapNoSuchOffice(responseBody) {
     const personMet = clean(getField(data, 'Name of met Person'));
     return {
         ...baseOVMapping(data),
-        ...RESTRICTED_OV_DEFAULTS,
+        ...DEFAULT_VALUES,
         contacted: mapContactedPerson(data),
         designation: personMet,
         boardSeen: clean(getField(data, 'Name board seen')),

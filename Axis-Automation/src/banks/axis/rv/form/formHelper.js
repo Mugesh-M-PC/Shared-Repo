@@ -3,41 +3,14 @@ const {
     buildAgencyRemarks,
     numericValue,
     parseVisitTimestamp,
-} = require('./applicantNotAvailableMapping');
+} = require('../flows/ApplicantNotAvailable');
 const {
     clean,
     firstPopulatedField,
     getField,
 } = require('../../shared/fieldHelpers');
-
-// Exact client-supplied values for CRM fields marked as missing. Do not
-// replace these literals with generic NA/blank values.
-// Closed/restricted cases use these client-approved safe dropdown defaults.
-const CLOSED_RV_DEFAULTS = Object.freeze({
-    relationship: 'OTHERS',
-    easeOfLocating: 'EASY',
-    ownershipResidence: 'RENTED',
-    yearsStaying: '0',
-});
-
-const NO_SUCH_PERSON_RV_DEFAULTS = Object.freeze({
-    ...CLOSED_RV_DEFAULTS,
-    stayConfirmedBy: 'NEIGHBOUR',
-    typeResidence: 'FLAT',
-});
-
-const NO_SUCH_ADDRESS_RV_DEFAULTS = Object.freeze({
-    ...CLOSED_RV_DEFAULTS,
-    contacted: 'NA',
-    easeOfLocating: 'UNTRACEABLE',
-    stayConfirmedBy: 'COULD NOT CONFIRM',
-    typeResidence: 'FLAT',
-});
-
-const CANCELLED_RV_DEFAULTS = Object.freeze({
-    ...CLOSED_RV_DEFAULTS,
-    stayConfirmedBy: 'COULD NOT CONFIRM',
-});
+const fieldMap = require('../mappings/axisRvMapping');
+const { questionKeys } = require('./questionnaire');
 
 /** Validate and return the nested DETAILS_API data object. */
 function getData(responseBody) {
@@ -67,15 +40,21 @@ function baseRVMapping(data) {
     };
 }
 
+/** Fill RV controls in portal order through their stable ID mapping. */
+async function fillRVQuestionnaire(axisPage, values) {
+    for (const fieldName of questionKeys) {
+        await axisPage.setQuestionnaireValueBySelector(
+            fieldMap[fieldName], fieldName, values?.[fieldName]
+        );
+    }
+}
+
 module.exports = {
-    CANCELLED_RV_DEFAULTS,
-    CLOSED_RV_DEFAULTS,
-    NO_SUCH_ADDRESS_RV_DEFAULTS,
-    NO_SUCH_PERSON_RV_DEFAULTS,
     baseRVMapping,
     clean,
     firstPopulatedField,
     getField,
     getData,
     numericValue,
+    fillRVQuestionnaire,
 };
