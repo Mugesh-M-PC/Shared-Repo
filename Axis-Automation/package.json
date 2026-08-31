@@ -1,0 +1,22 @@
+{
+  "name": "axis-bank-automation",
+  "version": "1.0.0",
+  "description": "Axis Bank Portal Automation using Playwright",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "start:axis": "node orchestrator/process-orchestrator.js",
+    "test:axis": "playwright test tests/axis/axisFlow.spec.js --headed",
+    "debug:axis": "playwright test tests/axis/axisFlow.spec.js --headed --debug",
+    "worker:axis": "node orchestrator/process-orchestrator.js",
+    "worker:ov": "node orchestrator/process-orchestrator.js OV",
+    "worker:rv": "node orchestrator/process-orchestrator.js RV",
+    "test:mappings": "node --test unit-tests/*.test.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}
