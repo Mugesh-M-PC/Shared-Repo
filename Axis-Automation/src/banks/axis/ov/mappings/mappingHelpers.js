@@ -6,7 +6,7 @@ const {
     clean,
     firstPopulatedField,
     getField,
-} = require('../fieldHelpers');
+} = require('../../shared/fieldHelpers');
 
 // Exact client-supplied values for CRM fields marked as missing. Do not
 // replace these literals with generic NA/blank values.

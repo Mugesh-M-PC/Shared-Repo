@@ -1,6 +1,6 @@
 // CRM-specific API and response-reading helpers. CRM payloads can be nested
 // and use inconsistent capitalization, spacing, or punctuation in field names.
-const { sendApiRequest } = require('../common/apiClient');
+const { sendApiRequest } = require('./apiClient');
 
 /** Normalize a CRM key so variants such as "TOKEN ID" and "tokenid" match. */
 function normalizeFieldName(value) {

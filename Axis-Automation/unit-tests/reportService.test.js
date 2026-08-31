@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {
     formatIndianDateTime,
     formatIndianFolderTimestamp,
-} = require('../services/report.service');
+} = require('../src/core/reporting/reportService');
 
 const knownInstant = new Date('2026-08-30T10:57:29.445Z');
 

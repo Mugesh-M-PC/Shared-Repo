@@ -1,6 +1,6 @@
 // Routes a normalized portal address type to the corresponding RV or OV form.
-const ovQuestionnaire = require('./ov/questionnaire');
-const rvQuestionnaire = require('./rv/questionnaire');
+const ovQuestionnaire = require('./ov/form/questionnaire');
+const rvQuestionnaire = require('./rv/form/questionnaire');
 
 const questionnaireFlows = {
     office: ovQuestionnaire,

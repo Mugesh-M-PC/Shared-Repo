@@ -3,10 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('@playwright/test');
-const { AxisProcessRunner } = require('../services/process.runner');
-const { ProcessService } = require('../services/process.service');
-const { ReportService } = require('../services/report.service');
-const { getAddressType } = require('../api/crm/customerDetailsApi');
+const { AxisProcessRunner } = require('./axisProcessRunner');
+const { ProcessService } = require('./processService');
+const { ReportService } = require('../../core/reporting/reportService');
+const { getAddressType } = require('../../core/api/customerDetailsApi');
 
 class ProcessOrchestrator {
     /** Store collaborators and initialize worker lifecycle state. */

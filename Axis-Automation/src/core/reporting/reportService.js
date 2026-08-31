@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ExcelJS = require('exceljs');
-const { getAddressType } = require('../api/crm/customerDetailsApi');
+const { getAddressType } = require('../api/customerDetailsApi');
 
 const REPORT_STATUSES = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'];
 const INDIAN_TIME_ZONE = 'Asia/Kolkata';

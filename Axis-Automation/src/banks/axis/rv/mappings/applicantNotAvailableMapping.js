@@ -6,7 +6,7 @@ const EXCLUDED_REMARK_FIELDS = new Set([
     'lat',
     'longi',
 ]);
-const { clean, getField } = require('../fieldHelpers');
+const { clean, getField } = require('../../shared/fieldHelpers');
 
 /** Parse the CRM visit timestamp into HTML date and time input formats. */
 function parseVisitTimestamp(value) {

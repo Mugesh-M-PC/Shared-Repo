@@ -1,13 +1,13 @@
 // End-to-end Playwright test. It uses live CRM/portal configuration, processes
 // one pending case, and verifies that the dashboard status reaches completed.
 const { test, expect } = require('@playwright/test');
-const { AxisProcessRunner } = require('../../services/process.runner');
+const { AxisProcessRunner } = require('../../src/workers/axis/axisProcessRunner');
 const {
     getCustomerDetails,
     getCustomerDetailsByVbStatus,
     updateCustomerStatus,
     waitForCustomerVbStatus,
-} = require('../../api/crm/customerDetailsApi');
+} = require('../../src/core/api/customerDetailsApi');
 
 test.describe('Axis Bank Verification Flow', () => {
     // Login/OTP is operator-assisted, so this suite has no global timeout.

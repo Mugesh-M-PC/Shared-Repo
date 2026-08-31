@@ -1,7 +1,7 @@
 // Shared questionnaire selector factory. RV and OV label maps translate the
 // human-facing row label to the stable HTML name/data-question-key attribute.
-const ovLocators = require('./ov/questionnaireLocators');
-const rvLocators = require('./rv/questionnaireLocators');
+const ovLocators = require('../ov/form/questionnaireLocators');
+const rvLocators = require('../rv/form/questionnaireLocators');
 
 const questionKeysByAddressType = {
     office: ovLocators.questionKeys,

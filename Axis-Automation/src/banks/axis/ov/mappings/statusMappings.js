@@ -9,7 +9,7 @@ const { mapNoSuchPersonWorking } = require('./noSuchPersonWorkingMapping');
 const {
     mapLoanCancelledNotApplied,
 } = require('./loanCancelledNotAppliedMapping');
-const { sanitizeMappedFields } = require('../fieldHelpers');
+const { sanitizeMappedFields } = require('../../shared/fieldHelpers');
 
 const statusMappings = new Map([
     ['applicant not available', mapApplicantNotAvailable],

@@ -1,12 +1,12 @@
 // Fast unit coverage for sanitizers and every configured RV/OV status family.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getRVStatusMapper } = require('../mappings/axis/rv/statusMappings');
-const { getOVStatusMapper } = require('../mappings/axis/ov/statusMappings');
+const { getRVStatusMapper } = require('../src/banks/axis/rv/mappings/statusMappings');
+const { getOVStatusMapper } = require('../src/banks/axis/ov/mappings/statusMappings');
 const {
     sanitizeNumericOnly,
     sanitizeStringOnly,
-} = require('../mappings/axis/fieldHelpers');
+} = require('../src/banks/axis/shared/fieldHelpers');
 
 // Representative CRM data; individual tests override only scenario-specific data.
 const data = {

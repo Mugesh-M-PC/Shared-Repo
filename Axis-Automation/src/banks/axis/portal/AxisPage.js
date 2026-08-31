@@ -1,13 +1,13 @@
 // Playwright page object for all Axis portal UI interactions. Keeping selectors
 // and interaction details here lets the runner describe business workflow only.
-const { getQuestionnaireFlow } = require('../flows/axis/questionnaireFlow');
+const { getQuestionnaireFlow } = require('../questionnaireFlow');
 const path = require('path');
 const {
     createListPageLocators,
-} = require('../locators/axis/listPageLocators');
+} = require('./listPageLocators');
 const {
     createQuestionnaireLocators,
-} = require('../locators/axis/questionnaireLocators');
+} = require('./questionnaireLocators');
 
 /** Normalize dropdown text without corrupting the valid option "Yes". */
 function normalizeDropdownOption(label) {

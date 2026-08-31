@@ -3,7 +3,7 @@ const {
     getCustomerDetails,
     getCustomerDetailsByVbStatus,
     updateCustomerStatus,
-} = require('../api/crm/customerDetailsApi');
+} = require('../../core/api/customerDetailsApi');
 
 class ProcessService {
     /** Store the Playwright request context used for all CRM calls. */

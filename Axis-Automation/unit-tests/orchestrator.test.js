@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {
     filterProcessesByVerificationType,
     getVerificationTypeFilter,
-} = require('../orchestrator/process-orchestrator');
+} = require('../src/workers/axis/axisVerificationWorker');
 
 const pendingProcesses = [
     { tokenid: '1', addtype: 'OV' },

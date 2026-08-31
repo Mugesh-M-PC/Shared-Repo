@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {
     normalizeDropdownOption,
     resolveDropdownSelection,
-} = require('../pages/AxisPage');
+} = require('../src/banks/axis/portal/AxisPage');
 
 test('dropdown normalization preserves Yes while still tolerating plurals', () => {
     assert.equal(normalizeDropdownOption('Yes'), 'yes');

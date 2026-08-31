@@ -1,18 +1,16 @@
 // Executes the browser workflow for one CRM record: resolve RV/OV, map data,
 // fill the portal questionnaire, upload a PDF, and confirm FI submission.
 const path = require('node:path');
-const { AxisPage } = require('../pages/AxisPage');
+const { AxisPage } = require('../../banks/axis/portal/AxisPage');
 const {
     getCustomerDetailsByTokenId,
     getCustomerName,
     getAddressType,
     getAddressTypeFromSelection,
     getCustomerStatus,
-} = require('../api/crm/customerDetailsApi');
-const { getQuestionnaireFlow } = require('../flows/axis/questionnaireFlow');
-const { getRVStatusMapper } = require('../mappings/axis/rv/statusMappings');
-const { getOVStatusMapper } = require('../mappings/axis/ov/statusMappings');
-const { resolveDocumentUploadPath } = require('./document.service');
+} = require('../../core/api/customerDetailsApi');
+const { getVerificationAdapter } = require('../../banks/axis/verificationAdapters');
+const { resolveDocumentUploadPath } = require('../../core/documents/documentService');
 
 class AxisProcessRunner {
     /** Bind one browser page to the page-object abstraction. */
@@ -102,13 +100,14 @@ class AxisProcessRunner {
             questionnaireFields[0]
         );
 
-        // RV and OV use separate status maps and questionnaire layouts.
+        // The bank adapter keeps type-specific mapping and form behavior out of
+        // this worker-level use-case coordinator.
         const customerStatus = getCustomerStatus(customerResponse.body);
-        const mapStatus = addressType === 'current'
-            ? getRVStatusMapper(customerStatus)
-            : getOVStatusMapper(customerStatus);
-        const questionnaireValues = mapStatus(customerResponse.body);
-        await getQuestionnaireFlow(addressType).fillQuestionnaire(
+        const adapter = getVerificationAdapter(addressType);
+        const questionnaireValues = adapter.mapStatus(customerStatus)(
+            customerResponse.body
+        );
+        await adapter.questionnaire.fillQuestionnaire(
             this.axisPage,
             questionnaireValues
         );
@@ -117,8 +116,8 @@ class AxisProcessRunner {
         await this.axisPage.openDocumentManager(addressType);
 
         // Select the case-specific or dummy PDF according to USE_DYNAMIC_PDF.
-        const documentsDirectory = path.resolve(__dirname, '..', 'documents');
-        const verificationType = addressType === 'current' ? 'RV' : 'OV';
+        const documentsDirectory = path.resolve(process.cwd(), 'documents');
+        const verificationType = adapter.verificationType;
         const documentUploadPath = resolveDocumentUploadPath({
             documentsDirectory,
             loanNumber: loanno,
