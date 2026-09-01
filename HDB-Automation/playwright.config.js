@@ -5,7 +5,7 @@ module.exports = defineConfig({
   testDir: './tests',
   timeout: 30_000,
   use: {
-    baseURL: 'http://localhost:8000',
+    baseURL: 'https://usm.hdbfs.com/login',
     headless: false,
     // viewport: { width: 1280, height: 720 },
     screenshot: 'only-on-failure',

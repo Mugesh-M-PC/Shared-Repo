@@ -8,22 +8,24 @@
   },
   "scripts": {
     "env:prod": "node -e \"require('node:fs').copyFileSync('.env.prod','.env')\"",
+    "env:dev": "node -e \"require('node:fs').copyFileSync('.env.dev','.env')\"",
     "validate:prod": "node scripts/validateHdbProduction.js --env-file .env.prod",
-    "install:hdb:browser": "playwright install chromium",
+    "setup": "npm ci && npm run install:browser",
+    "install:browser": "playwright install chromium",
     "start:hdb": "npm run validate:prod && npm run env:prod && node scripts/runHdbVerificationWorker.js --headed",
     "debug:hdb": "npm run validate:prod && npm run env:prod && node --inspect scripts/runHdbVerificationWorker.js --headed --debug",
     "debug:hdb:inspector": "npm run validate:prod && npm run env:prod && set PWDEBUG=1&& node scripts/runHdbVerificationWorker.js --headed",
-    "dev:duplicate-images": "node devhelpers/duplicateImagesByTokenAndAddtype.js",
-    "update-status": "npm run env:prod && playwright test tests/updateStatus.spec.js --headed",
+    "debug:dev": "npm run env:dev && node --inspect scripts/runHdbVerificationWorker.js --headed --debug",
+    "update-status:dev": "npm run env:dev && playwright test tests/updateStatus.spec.js --headed",
     "report": "playwright show-report --port 9324",
     "report:file": "start playwright-report/index.html"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.55.0"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }
