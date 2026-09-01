@@ -42,9 +42,9 @@ test('RV and OV dropdowns use the mapping-table defaults', () => {
         resolveDropdownSelection(
             'workingAs',
             'Unknown',
-            ['--None--', 'Officer (Permanent)', 'Owner']
+            ['--None--', 'Officer (Permanent)', 'Officer (Contract)', 'Owner']
         ),
-        'Officer (Permanent)'
+        'Officer (Contract)'
     );
 });
 

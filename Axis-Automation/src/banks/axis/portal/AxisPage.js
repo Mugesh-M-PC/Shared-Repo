@@ -72,7 +72,7 @@ function resolveDropdownSelection(questionKey, value, optionLabels) {
         ownershipResidence: ['rented'],
         stayConfirmedBy: ['couldnotconfirm', 'neighbour'],
         typeResidence: ['flat'],
-        workingAs: ['officerpermanent'],
+        workingAs: ['officercontract'],
         occupancy: ['rented'],
         nature: ['other'],
         boardSeen: ['no'],
