@@ -76,6 +76,45 @@ function getCustomerDetailsByVbStatus(payload, vbStatus) {
     return matchingRecords;
 }
 
+const VB_STATUS_ALIASES = Object.freeze({
+    '0': 'pending',
+    '1': 'completed',
+    pending: 'pending',
+    completed: 'completed',
+    submitted: 'completed',
+    failed: 'failed',
+});
+
+/** Normalize numeric and textual CRM bank-verification statuses. */
+function normalizeVbStatus(value) {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    return VB_STATUS_ALIASES[normalized] || null;
+}
+
+/** Recursively collect CRM list records regardless of their current status. */
+function getCustomerRecords(payload) {
+    const records = [];
+
+    function visit(value) {
+        if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+        }
+        if (!value || typeof value !== 'object') return;
+
+        const tokenId = getDirectField(value, 'tokenid');
+        const status = getDirectField(value, 'vb_status');
+        if (tokenId !== undefined || status !== undefined) {
+            records.push(value);
+            return;
+        }
+        Object.values(value).forEach(visit);
+    }
+
+    visit(payload);
+    return records;
+}
+
 /** Recursively find a single CRM case by tokenid. */
 function getCustomerRecordByTokenId(payload, tokenid) {
     const expectedTokenId = String(tokenid ?? '').trim();
@@ -354,8 +393,10 @@ async function waitForCustomerVbStatus(
 }
 
 module.exports = {
+    getDirectField,
     getCustomerDetails,
     getCustomerDetailsByVbStatus,
+    getCustomerRecords,
     getCustomerRecordByTokenId,
     getCustomerDetailsByTokenId,
     getCustomerName,
@@ -363,6 +404,7 @@ module.exports = {
     getAddressTypeFromSelection,
     getCustomerStatus,
     getSevenDayDateRange,
+    normalizeVbStatus,
     updateCustomerStatus,
     waitForCustomerVbStatus,
 };

@@ -79,15 +79,17 @@ persists run state and Excel output.
 ## Case lifecycle
 
 1. Fetch pending CRM records and optionally filter to RV or OV.
-2. Set the selected token to `running` and record it locally.
-3. Fetch full details and resolve the address type.
-4. Obtain the matching verification adapter.
-5. Map the CRM scenario to portal-ready questionnaire values.
-6. Open and fill the questionnaire, then save it.
-7. Resolve and upload the configured PDF.
-8. Confirm FI submission.
-9. Set CRM status to `completed`; on an earlier error, best-effort set `failed`.
-10. Persist JSON and Excel reporting regardless of run outcome.
+2. Keep only records whose `final_recomendation` matches
+   `FINAL_RECOMMENDATION_ALLOWED_VALUES`; matching is case-insensitive.
+3. Set the selected token to `running` and record it locally.
+4. Fetch full details and resolve the address type.
+5. Obtain the matching verification adapter.
+6. Map the CRM scenario to portal-ready questionnaire values.
+7. Open and fill the questionnaire, then save it.
+8. Resolve and upload the configured PDF.
+9. Confirm FI submission.
+10. Set CRM status to `completed`; on an earlier error, best-effort set `failed`.
+11. Persist JSON and Excel reporting regardless of run outcome.
 
 ## Commands
 
@@ -95,6 +97,8 @@ persists run state and Excel output.
 - `npm run worker:rv` processes only RV records.
 - `npm run worker:ov` processes only OV records.
 - `npm run test:mappings` runs all fast Node unit tests.
+- `npm run update-status` bulk-updates CRM bank statuses using `UPDATE_STATUS`
+  and `VERIFICATION_TYPE`, and writes an audit CSV under `output/`.
 - `npm run test:axis` runs the live headed integration flow.
 - `npm run debug:axis` runs the live flow with the Playwright debugger.
 
@@ -102,6 +106,30 @@ Copy `.env.example` to `.env` and fill the CRM endpoints and credentials before
 starting a worker. Login and OTP remain operator-assisted, so the browser runs
 headed. Set `USE_DYNAMIC_PDF=true` to require
 `documents/<loan-number>-<RV|OV>.pdf`; otherwise the dummy PDF is used.
+
+## CRM status maintenance
+
+The maintenance command mirrors HDB's status-update utility. Configure the
+target and scope before running it:
+
+```env
+UPDATE_STATUS=pending
+VERIFICATION_TYPE=ALL
+```
+
+`UPDATE_STATUS` accepts `pending`, `completed`, or `failed`.
+`VERIFICATION_TYPE` accepts `RV`, `OV`, `ALL`, or blank. The command fetches the
+CRM date-window list, skips duplicate tokens, wrong verification types, invalid
+statuses, and records already in the target status, then updates the remaining
+tokens sequentially. This maintenance path intentionally does not apply the
+worker's final-recommendation allowlist.
+
+```powershell
+npm run update-status
+```
+
+This command changes live CRM records. Review `.env` before running it and use
+the generated CSV in `output/` as the audit trail.
 
 ## Change guide
 

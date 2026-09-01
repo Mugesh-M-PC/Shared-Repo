@@ -16,6 +16,7 @@ test('verification selector accepts RV/OV and rejects unsupported values', () =>
     assert.equal(getVerificationTypeFilter(' ov '), 'OV');
     assert.equal(getVerificationTypeFilter('rv'), 'RV');
     assert.equal(getVerificationTypeFilter(''), null);
+    assert.equal(getVerificationTypeFilter('all'), null);
     assert.throws(
         () => getVerificationTypeFilter('office'),
         /must be RV or OV/

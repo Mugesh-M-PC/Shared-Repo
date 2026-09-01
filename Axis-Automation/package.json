@@ -11,6 +11,7 @@
     "worker:axis": "node scripts/runAxisVerificationWorker.js",
     "worker:ov": "node scripts/runAxisVerificationWorker.js OV",
     "worker:rv": "node scripts/runAxisVerificationWorker.js RV",
+    "update-status": "playwright test tests/updateStatus.spec.js",
     "test:mappings": "node --test unit-tests/*.test.js"
   },
   "devDependencies": {

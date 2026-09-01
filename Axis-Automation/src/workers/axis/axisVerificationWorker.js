@@ -201,7 +201,7 @@ function getVerificationTypeFilter(
     value = process.argv[2] ?? process.env.VERIFICATION_TYPE
 ) {
     const normalizedValue = String(value ?? '').trim().toUpperCase();
-    if (!normalizedValue) return null;
+    if (!normalizedValue || normalizedValue === 'ALL') return null;
     if (!['RV', 'OV'].includes(normalizedValue)) {
         throw new Error('Verification type must be RV or OV.');
     }
@@ -234,6 +234,7 @@ async function main() {
         'CRM_CLIENT_ID',
         'CRM_API_KEY',
         'UPDATE_STATUS_API',
+        'FINAL_RECOMMENDATION_ALLOWED_VALUES',
     ];
     const missingEnvironmentVariables = requiredEnvironmentVariables.filter(
         (name) => !String(process.env[name] ?? '').trim()
