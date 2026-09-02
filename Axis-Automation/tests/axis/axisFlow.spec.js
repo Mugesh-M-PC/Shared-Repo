@@ -8,6 +8,10 @@ const {
     updateCustomerStatus,
     waitForCustomerVbStatus,
 } = require('../../src/core/api/customerDetailsApi');
+const {
+    isPortalSessionError,
+    isSubmissionUncertainError,
+} = require('../../src/workers/axis/portalSessionManager');
 
 test.describe('Axis Bank Verification Flow', () => {
     // Login/OTP is operator-assisted, so this suite has no global timeout.
@@ -44,29 +48,53 @@ test.describe('Axis Bank Verification Flow', () => {
         const pendingCase = pendingCases[0];
         const processId = pendingCase.tokenid;
 
-        await updateCustomerStatus(page.request, processId, 'running');
-        try {
-            await runner.processRecord(pendingCase);
-            await updateCustomerStatus(page.request, processId, 'completed');
+        while (true) {
+            // A forced server-side probe prevents claiming a stale visible list.
+            await runner.ensureSession();
+            await updateCustomerStatus(page.request, processId, 'running');
 
-            const completedRecord = await waitForCustomerVbStatus(
-                page.request,
-                processId,
-                'completed'
-            );
-            expect(String(completedRecord.vb_status).toLowerCase())
-                .toBe('completed');
-        } catch (error) {
-            // Preserve the original browser error after best-effort failed status.
             try {
-                await updateCustomerStatus(page.request, processId, 'failed');
-            } catch (statusError) {
-                console.error(
-                    `[Test] Could not mark ${processId} as failed: ` +
-                    statusError.message
+                await runner.processRecord(pendingCase);
+                await updateCustomerStatus(page.request, processId, 'completed');
+
+                const completedRecord = await waitForCustomerVbStatus(
+                    page.request,
+                    processId,
+                    'completed'
                 );
+                expect(String(completedRecord.vb_status).toLowerCase())
+                    .toBe('completed');
+                break;
+            } catch (error) {
+                if (isPortalSessionError(error)) {
+                    await updateCustomerStatus(page.request, processId, 'pending');
+                    console.warn(
+                        `[Test] ${processId}: session expired before submission; ` +
+                        'waiting for login/OTP before retrying.'
+                    );
+                    await runner.waitForAuthentication();
+                    continue;
+                }
+
+                if (isSubmissionUncertainError(error)) {
+                    console.error(
+                        `[Test] ${processId}: submission requires reconciliation; ` +
+                        'CRM remains RUNNING to prevent a duplicate retry.'
+                    );
+                    throw error;
+                }
+
+                // Preserve the original browser error after best-effort failed status.
+                try {
+                    await updateCustomerStatus(page.request, processId, 'failed');
+                } catch (statusError) {
+                    console.error(
+                        `[Test] Could not mark ${processId} as failed: ` +
+                        statusError.message
+                    );
+                }
+                throw error;
             }
-            throw error;
         }
     });
 });

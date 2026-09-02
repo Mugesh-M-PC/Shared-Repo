@@ -306,7 +306,7 @@ async function getCustomerDetailsByTokenId(request, tokenid) {
     });
 }
 
-/** POST running/completed/failed rd_status for one dashboard item. */
+/** POST pending/running/completed/failed rd_status for one dashboard item. */
 async function updateCustomerStatus(request, tokenid, status = process.env.UPDATE_STATUS) {
     const {
         UPDATE_STATUS_API,

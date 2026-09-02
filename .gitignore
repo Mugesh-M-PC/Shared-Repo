@@ -2,4 +2,6 @@
 Axis-Automation/ARCHITECTURE_PLAN.md
 /Axis-Automation/playwright-report
 /Axis-Automation/test-results
+/Axis-Automation/output
+/Axis-Automation/.env.prod
 /HDB-Automation/node_modules

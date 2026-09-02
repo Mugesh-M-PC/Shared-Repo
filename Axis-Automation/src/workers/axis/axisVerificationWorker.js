@@ -1,12 +1,19 @@
 // Long-running worker entry point. It polls pending CRM records sequentially,
-// delegates browser work, updates rd_status, and writes JSON/Excel run reports.
+// delegates browser work, updates rd_status, and writes JSON/Excel/CSV reports.
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('@playwright/test');
 const { AxisProcessRunner } = require('./axisProcessRunner');
 const { ProcessService } = require('./processService');
 const { ReportService } = require('../../core/reporting/reportService');
+const {
+    AutomationCsvLogger,
+} = require('../../core/reporting/automationCsvLogger');
 const { getAddressType } = require('../../core/api/customerDetailsApi');
+const {
+    isPortalSessionError,
+    isSubmissionUncertainError,
+} = require('./portalSessionManager');
 
 class ProcessOrchestrator {
     /** Store collaborators and initialize worker lifecycle state. */
@@ -17,6 +24,7 @@ class ProcessOrchestrator {
         pollIntervalMs,
         processLimit = 0,
         verificationTypeFilter = null,
+        automationCsvLogger = null,
     }) {
         this.runner = runner;
         this.processService = processService;
@@ -25,16 +33,44 @@ class ProcessOrchestrator {
         this.processLimit = processLimit;
         // Optional temporary selector: null processes both, RV/OV processes one.
         this.verificationTypeFilter = verificationTypeFilter;
+        this.automationCsvLogger = automationCsvLogger;
         this.processedCount = 0;
         this.stopRequested = false;
         this.waitTimer = null;
         this.resolveWait = null;
+        this.abortController = new AbortController();
+    }
+
+    /** Append one durable per-token outcome without changing CRM behavior. */
+    async logAutomationOutcome(input) {
+        if (!this.automationCsvLogger) return null;
+
+        try {
+            const result = await this.automationCsvLogger.log(input);
+            console.log(
+                `[AutomationCSV] ${input.processRecord?.tokenid || 'unknown'}: ` +
+                `${input.automationStatus} -> ` +
+                `${result.storedInCsv ? result.csvPath : result.pendingPath}`
+            );
+            return result;
+        } catch (error) {
+            console.error(
+                `[AutomationCSV] Could not record token ` +
+                `${input.processRecord?.tokenid || 'unknown'}: ${error.message}`
+            );
+            return null;
+        }
+    }
+
+    get signal() {
+        return this.abortController.signal;
     }
 
     /** Stop accepting new work while allowing the current case to finish. */
     requestStop(signal) {
         if (this.stopRequested) return;
         this.stopRequested = true;
+        this.abortController.abort();
         console.log(
             `[Orchestrator] ${signal} received. ` +
             'No new processes will start; the current process may finish.'
@@ -48,28 +84,169 @@ class ProcessOrchestrator {
         const processId = String(processRecord.tokenid);
         const startedAt = new Date();
         let completedStatusSet = false;
+        let runningStatusSet = false;
+        let claimAttempted = false;
+        let processResult = null;
 
         try {
-            // Claim the item before browser automation starts.
+            // Never claim CRM work until the authenticated Axis list is ready.
+            await this.runner.ensureSession({ signal: this.signal });
+            if (this.stopRequested) return { outcome: 'stopped' };
+
+            claimAttempted = true;
             await this.processService.updateStatus(processId, 'running');
+            runningStatusSet = true;
             this.reportService.markRunning(processId, startedAt);
 
             // The runner returns only after the submission popup is confirmed.
-            await this.runner.processRecord(processRecord);
+            processResult = await this.runner.processRecord(processRecord, {
+                signal: this.signal,
+            });
 
             await this.processService.updateStatus(processId, 'completed');
             completedStatusSet = true;
             this.reportService.markCompleted(processId, startedAt);
+            await this.logAutomationOutcome({
+                processRecord,
+                processResult,
+                crmStatus: 'completed',
+                automationStatus: 'COMPLETED',
+                statusDetails: 'Axis portal submission and CRM completion confirmed.',
+            });
             console.log(`[Orchestrator] ${processId}: completed.`);
+            return { outcome: 'completed' };
         } catch (error) {
             console.error(`[Orchestrator] ${processId}: ${error.stack ?? error}`);
 
+            if (error?.name === 'AbortError' && this.stopRequested) {
+                return { outcome: 'stopped' };
+            }
+
+            if (isPortalSessionError(error)) {
+                let resetToPending = !runningStatusSet;
+
+                if (runningStatusSet) {
+                    try {
+                        await this.processService.updateStatus(processId, 'pending');
+                        resetToPending = true;
+                    } catch (statusError) {
+                        console.error(
+                            `[Orchestrator] ${processId}: could not return the ` +
+                            `session-interrupted case to PENDING: ${statusError.message}`
+                        );
+                        this.reportService.markReconciliationRequired?.(
+                            processId,
+                            startedAt,
+                            statusError
+                        );
+                        await this.logAutomationOutcome({
+                            processRecord,
+                            processResult,
+                            crmStatus: 'running',
+                            automationStatus: 'RECONCILIATION_REQUIRED',
+                            statusDetails:
+                                'Session expired before submission, but CRM could not be returned to pending.',
+                            error: statusError,
+                        });
+                    }
+                }
+
+                if (resetToPending) {
+                    this.reportService.markPending?.(processId, error);
+                    await this.logAutomationOutcome({
+                        processRecord,
+                        processResult,
+                        crmStatus: 'pending',
+                        automationStatus: 'SESSION_EXPIRED_RETRY',
+                        statusDetails:
+                            'Session expired before final confirmation; queued for retry after login.',
+                        error,
+                    });
+                    console.warn(
+                        `[Orchestrator] ${processId}: session expired before ` +
+                        'submission; the case was returned to PENDING for retry.'
+                    );
+                }
+
+                try {
+                    await this.runner.waitForAuthentication({ signal: this.signal });
+                } catch (authenticationError) {
+                    if (authenticationError?.name !== 'AbortError') {
+                        throw authenticationError;
+                    }
+                }
+
+                return {
+                    outcome: resetToPending
+                        ? 'retry'
+                        : 'reconciliation-required',
+                };
+            }
+
+            if (isSubmissionUncertainError(error)) {
+                this.reportService.markReconciliationRequired?.(
+                    processId,
+                    startedAt,
+                    error
+                );
+                await this.logAutomationOutcome({
+                    processRecord,
+                    processResult,
+                    crmStatus: 'running',
+                    automationStatus: 'RECONCILIATION_REQUIRED',
+                    statusDetails:
+                        'Session expired after final confirmation started; manual bank/CRM reconciliation is required.',
+                    error,
+                });
+                console.error(
+                    `[Orchestrator] ${processId}: submission outcome is uncertain. ` +
+                    'CRM status remains RUNNING to prevent an automatic duplicate retry.'
+                );
+
+                try {
+                    await this.runner.waitForAuthentication({ signal: this.signal });
+                } catch (authenticationError) {
+                    if (authenticationError?.name !== 'AbortError') {
+                        throw authenticationError;
+                    }
+                }
+
+                return { outcome: 'reconciliation-required' };
+            }
+
+            if (!claimAttempted) {
+                this.reportService.markPending?.(processId, error);
+                await this.logAutomationOutcome({
+                    processRecord,
+                    processResult,
+                    crmStatus: 'pending',
+                    automationStatus: 'SESSION_CHECK_RETRY',
+                    statusDetails:
+                        'Portal session could not be verified before the CRM case was claimed.',
+                    error,
+                });
+                console.warn(
+                    `[Orchestrator] ${processId}: the portal session could not ` +
+                    'be verified, so the CRM case remains PENDING.'
+                );
+                return { outcome: 'retry' };
+            }
+
             if (completedStatusSet) {
+                await this.logAutomationOutcome({
+                    processRecord,
+                    processResult,
+                    crmStatus: 'completed',
+                    automationStatus: 'COMPLETED_WITH_REPORT_ERROR',
+                    statusDetails:
+                        'CRM completion succeeded, but the JSON/XLSX report update failed.',
+                    error,
+                });
                 console.error(
                     `[Orchestrator] ${processId}: backend is COMPLETED, but ` +
                     'the local completion report could not be saved.'
                 );
-                return;
+                return { outcome: 'completed' };
             }
 
             // A submission or pre-submission failure must be visible in CRM.
@@ -92,6 +269,15 @@ class ProcessOrchestrator {
                     reportError.message
                 );
             }
+            await this.logAutomationOutcome({
+                processRecord,
+                processResult,
+                crmStatus: 'failed',
+                automationStatus: 'FAILED',
+                statusDetails: 'Axis automation failed before confirmed completion.',
+                error,
+            });
+            return { outcome: 'failed' };
         }
     }
 
@@ -110,8 +296,13 @@ class ProcessOrchestrator {
     /** Initialize the browser once and poll/process records until stopped. */
     async run() {
         this.reportService.beginRun(this.processLimit);
+        if (this.automationCsvLogger) {
+            const csvPaths = await this.automationCsvLogger.initialize();
+            console.log(`[AutomationCSV] RV tracker: ${csvPaths.RV}`);
+            console.log(`[AutomationCSV] OV tracker: ${csvPaths.OV}`);
+        }
         try {
-            await this.runner.initialize();
+            await this.runner.initialize({ signal: this.signal });
 
             console.log(
                 `[Orchestrator] Record limit: ` +
@@ -120,6 +311,11 @@ class ProcessOrchestrator {
 
             while (!this.stopRequested) {
                 try {
+                    // Keep the bank session warm and pause CRM polling while
+                    // operator-assisted login/OTP is required.
+                    await this.runner.maintainSession({ signal: this.signal });
+                    if (this.stopRequested) break;
+
                     const pendingProcesses = await this.processService
                         .getPendingProcesses();
                     const eligibleProcesses = filterProcessesByVerificationType(
@@ -157,7 +353,15 @@ class ProcessOrchestrator {
 
                     for (const processRecord of selectedProcesses) {
                         if (this.stopRequested) break;
-                        await this.processOne(processRecord);
+                        const result = await this.processOne(processRecord);
+
+                        if (result?.outcome === 'retry') {
+                            // Refetch after re-authentication so the case is
+                            // retried only from its fresh CRM PENDING state.
+                            break;
+                        }
+                        if (result?.outcome === 'stopped') break;
+
                         this.processedCount += 1;
 
                         if (
@@ -177,7 +381,7 @@ class ProcessOrchestrator {
                     // browser on the portal home/list page while polling for
                     // newly pending records.
                     if (!this.stopRequested && selectedProcesses.length > 0) {
-                        await this.runner.prepareForIdle();
+                        await this.runner.prepareForIdle({ signal: this.signal });
                     }
                 } catch (error) {
                     console.error(`[Orchestrator] Poll failed: ${error.stack ?? error}`);
@@ -193,14 +397,19 @@ class ProcessOrchestrator {
     }
 }
 
+/** Parse a required positive millisecond configuration value. */
+function getPositiveEnvironmentNumber(name, fallback) {
+    const value = process.env[name] ?? String(fallback);
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) {
+        throw new Error(`${name} must be a positive number.`);
+    }
+    return number;
+}
+
 /** Parse and validate the delay between dashboard polls. */
 function getPollIntervalMs() {
-    const value = process.env.POLL_INTERVAL_MS ?? '10000';
-    const pollIntervalMs = Number(value);
-    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
-        throw new Error('POLL_INTERVAL_MS must be a positive number.');
-    }
-    return pollIntervalMs;
+    return getPositiveEnvironmentNumber('POLL_INTERVAL_MS', 10_000);
 }
 
 /** Parse PROCESS_LIMIT; zero or blank means no per-run limit. */
@@ -276,15 +485,28 @@ async function main() {
     });
     const context = await browser.newContext();
     const page = await context.newPage();
-    const runner = new AxisProcessRunner(page);
+    const runner = new AxisProcessRunner(page, {
+        sessionOptions: {
+            authCheckIntervalMs: getPositiveEnvironmentNumber(
+                'AXIS_AUTH_CHECK_INTERVAL_MS',
+                5_000
+            ),
+            keepAliveIntervalMs: getPositiveEnvironmentNumber(
+                'AXIS_KEEPALIVE_INTERVAL_MS',
+                4 * 60_000
+            ),
+        },
+    });
     const processService = new ProcessService(page.request);
     const reportService = new ReportService(
         path.resolve(process.cwd(), 'reports', 'process-report.json')
     );
+    const automationCsvLogger = new AutomationCsvLogger();
     const orchestrator = new ProcessOrchestrator({
         runner,
         processService,
         reportService,
+        automationCsvLogger,
         pollIntervalMs: getPollIntervalMs(),
         processLimit: getProcessLimit(),
         verificationTypeFilter: getVerificationTypeFilter(),
@@ -314,6 +536,7 @@ module.exports = {
     ProcessOrchestrator,
     filterProcessesByVerificationType,
     getPollIntervalMs,
+    getPositiveEnvironmentNumber,
     getProcessLimit,
     getVerificationTypeFilter,
     main,

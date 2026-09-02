@@ -5,7 +5,13 @@ const path = require('node:path');
 const ExcelJS = require('exceljs');
 const { getAddressType } = require('../api/customerDetailsApi');
 
-const REPORT_STATUSES = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'];
+const REPORT_STATUSES = [
+    'PENDING',
+    'RUNNING',
+    'COMPLETED',
+    'FAILED',
+    'RECONCILIATION_REQUIRED',
+];
 const INDIAN_TIME_ZONE = 'Asia/Kolkata';
 
 /** Return stable date/time parts in Indian Standard Time using a 12-hour clock. */
@@ -72,6 +78,7 @@ class ReportService {
                 running: 0,
                 completed: 0,
                 failed: 0,
+                reconciliationRequired: 0,
             },
             failures: [],
             processes: [],
@@ -131,6 +138,7 @@ class ReportService {
                 running: 0,
                 completed: 0,
                 failed: 0,
+                reconciliationRequired: 0,
             },
             failures: [],
             processes: [],
@@ -214,6 +222,19 @@ class ReportService {
         });
     }
 
+    /** Return a safely interrupted pre-submission case to the retry queue. */
+    markPending(processId, error = null) {
+        return this.upsert(processId, {
+            status: 'PENDING',
+            startedAt: null,
+            completedAt: null,
+            duration: null,
+            error: error
+                ? error instanceof Error ? error.message : String(error)
+                : null,
+        });
+    }
+
     /** Record successful completion and elapsed milliseconds. */
     markCompleted(processId, startedAt, completedAt = new Date()) {
         return this.upsert(processId, {
@@ -234,6 +255,21 @@ class ReportService {
         });
     }
 
+    /** Hold a possibly submitted case for manual bank/CRM reconciliation. */
+    markReconciliationRequired(
+        processId,
+        startedAt,
+        error,
+        completedAt = new Date()
+    ) {
+        return this.upsert(processId, {
+            status: 'RECONCILIATION_REQUIRED',
+            completedAt: formatIndianDateTime(completedAt),
+            duration: completedAt.getTime() - startedAt.getTime(),
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+
     /** Recount statuses, prioritize failures, and rebuild the failure subset. */
     recalculateSummary() {
         this.report.run ??= {
@@ -247,17 +283,26 @@ class ReportService {
             running: 0,
             completed: 0,
             failed: 0,
+            reconciliationRequired: 0,
+        };
+        const summaryKeys = {
+            PENDING: 'pending',
+            RUNNING: 'running',
+            COMPLETED: 'completed',
+            FAILED: 'failed',
+            RECONCILIATION_REQUIRED: 'reconciliationRequired',
         };
         for (const record of this.report.processes) {
             const status = String(record.status).toUpperCase();
             if (!REPORT_STATUSES.includes(status)) continue;
-            summary[status.toLowerCase()] += 1;
+            summary[summaryKeys[status]] += 1;
         }
         const statusPriority = {
             FAILED: 0,
-            RUNNING: 1,
-            PENDING: 2,
-            COMPLETED: 3,
+            RECONCILIATION_REQUIRED: 1,
+            RUNNING: 2,
+            PENDING: 3,
+            COMPLETED: 4,
         };
         this.report.processes.sort((left, right) => {
             const leftPriority = statusPriority[String(left.status).toUpperCase()] ?? 4;
@@ -265,10 +310,14 @@ class ReportService {
             return leftPriority - rightPriority;
         });
         this.report.failures = this.report.processes
-            .filter((record) => String(record.status).toUpperCase() === 'FAILED')
+            .filter((record) => [
+                'FAILED',
+                'RECONCILIATION_REQUIRED',
+            ].includes(String(record.status).toUpperCase()))
             .map((record) => ({
                 processId: record.processId,
                 verificationType: record.verificationType,
+                status: record.status,
                 error: record.error,
                 startedAt: record.startedAt,
                 completedAt: record.completedAt,
@@ -336,6 +385,10 @@ class ReportService {
             ['Running', this.report.summary.running],
             ['Completed', this.report.summary.completed],
             ['Failed', this.report.summary.failed],
+            [
+                'Reconciliation required',
+                this.report.summary.reconciliationRequired,
+            ],
         ]);
 
         const summaryHeader = summarySheet.getRow(6);
@@ -348,7 +401,7 @@ class ReportService {
             };
             cell.alignment = { horizontal: 'center' };
         });
-        for (let rowNumber = 7; rowNumber <= 11; rowNumber += 1) {
+        for (let rowNumber = 7; rowNumber <= 12; rowNumber += 1) {
             const countCell = summarySheet.getCell(`B${rowNumber}`);
             countCell.numFmt = '#,##0';
             countCell.alignment = { horizontal: 'right' };
@@ -361,6 +414,7 @@ class ReportService {
         failuresSheet.columns = [
             { header: 'Process ID', key: 'processId', width: 18 },
             { header: 'Verification Type', key: 'verificationType', width: 20 },
+            { header: 'Status', key: 'status', width: 26 },
             { header: 'Failure Reason', key: 'error', width: 70 },
             { header: 'Started At', key: 'startedAt', width: 26 },
             { header: 'Completed At', key: 'completedAt', width: 26 },
@@ -389,7 +443,7 @@ class ReportService {
         failuresSheet.getColumn('duration').numFmt = '#,##0';
         failuresSheet.autoFilter = {
             from: 'A1',
-            to: 'F1',
+            to: 'G1',
         };
 
         const temporaryPath = `${this.excelReportPath}.tmp`;

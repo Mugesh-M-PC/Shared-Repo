@@ -8,6 +8,8 @@ select RV or OV behavior, and reusable infrastructure stays in `src/core`.
 
 ```text
 npm command
+  -> validate .env.prod
+  -> copy .env.prod to .env
   -> scripts/runAxisVerificationWorker.js
   -> src/workers/axis/axisVerificationWorker.js
        -> ProcessService: fetch and update CRM work
@@ -17,7 +19,8 @@ npm command
             -> questionnaire: fill fields in portal order
             -> AxisPage: perform browser interactions
             -> DocumentService: resolve the upload PDF
-       -> ReportService: persist run results
+       -> ReportService: persist JSON and Excel run results
+       -> AutomationCsvLogger: append durable RV/OV token outcomes
 ```
 
 The dependency direction is intentional: scripts may depend on workers, workers
@@ -29,11 +32,13 @@ code. Core modules do not depend on workers or browser pages.
 ```text
 Axis-Automation/
 |-- scripts/
-|   `-- runAxisVerificationWorker.js      # executable entry point
+|   |-- runAxisVerificationWorker.js      # executable entry point
+|   `-- validateAxisProduction.js         # production preflight validation
 |-- src/
 |   |-- workers/axis/
 |   |   |-- axisVerificationWorker.js     # polling and lifecycle boundary
 |   |   |-- axisProcessRunner.js          # one-case use-case coordinator
+|   |   |-- portalSessionManager.js       # keepalive and login recovery
 |   |   `-- processService.js             # worker-facing CRM operations
 |   |-- banks/axis/
 |   |   |-- verificationAdapters.js       # RV/OV adapter registry
@@ -44,7 +49,7 @@ Axis-Automation/
 |   `-- core/
 |       |-- api/                          # transport and CRM API contract
 |       |-- documents/                    # PDF selection
-|       `-- reporting/                    # JSON and Excel reporting
+|       `-- reporting/                    # JSON, Excel, and token CSV reporting
 |-- tests/axis/                            # live Playwright workflow
 |-- unit-tests/                            # fast isolated tests
 |-- documents/                            # runtime upload inputs
@@ -61,7 +66,8 @@ The worker layer owns the long-running lifecycle. `axisVerificationWorker.js`
 handles configuration, browser setup, polling, process limits, graceful
 shutdown, CRM statuses, and reporting. `axisProcessRunner.js` coordinates the
 ordered steps for exactly one CRM record. `processService.js` is the worker's
-narrow CRM boundary.
+narrow CRM boundary. `portalSessionManager.js` detects authentication state,
+keeps idle sessions active, and waits safely for operator-assisted re-login.
 
 The bank layer owns portal-specific behavior. `verificationAdapters.js` is the
 only place that selects RV versus OV. Each type exports the same interface from
@@ -74,22 +80,31 @@ in `portal`; shared normalization belongs in `shared`.
 
 Core code is reusable infrastructure. `api` wraps Playwright request calls and
 CRM response parsing, `documents` resolves safe upload paths, and `reporting`
-persists run state and Excel output.
+persists run state plus JSON, Excel, and append-only token CSV output.
 
 ## Case lifecycle
 
-1. Fetch pending CRM records and optionally filter to RV or OV.
-2. Keep only records whose `final_recomendation` matches
+1. Confirm the Axis list session is authenticated, sending a background
+   keepalive when due and pausing CRM polling for manual login/OTP when needed.
+2. Fetch pending CRM records and optionally filter to RV or OV.
+3. Keep only records whose `final_recomendation` matches
    `FINAL_RECOMMENDATION_ALLOWED_VALUES`; matching is case-insensitive.
-3. Set the selected token to `running` and record it locally.
-4. Fetch full details and resolve the address type.
-5. Obtain the matching verification adapter.
-6. Map the CRM scenario to portal-ready questionnaire values.
-7. Open and fill the questionnaire, then save it.
-8. Resolve and upload the configured PDF.
-9. Confirm FI submission.
-10. Set CRM status to `completed`; on an earlier error, best-effort set `failed`.
-11. Persist JSON and Excel reporting regardless of run outcome.
+4. Set the selected token to `running` only after authentication is confirmed.
+5. Fetch full details and resolve the address type.
+6. Obtain the matching verification adapter.
+7. Map the CRM scenario to portal-ready questionnaire values.
+8. Open and fill the questionnaire, then save it.
+9. Resolve and upload the configured PDF.
+10. Confirm FI submission.
+11. Set CRM status to `completed`; on a normal earlier error, best-effort set
+    `failed`.
+12. If the session expires before submission, return the CRM token to `pending`,
+    wait for login/OTP, and retry it from a fresh poll. If expiry happens after
+    submission starts, leave CRM at `running` and report
+    `RECONCILIATION_REQUIRED` so an automatic retry cannot duplicate a bank
+    submission.
+13. Persist JSON and Excel reporting and append the token outcome to the RV or
+    OV automation CSV regardless of run outcome.
 
 ## Commands
 
@@ -101,11 +116,60 @@ persists run state and Excel output.
   and `VERIFICATION_TYPE`, and writes an audit CSV under `output/`.
 - `npm run test:axis` runs the live headed integration flow.
 - `npm run debug:axis` runs the live flow with the Playwright debugger.
+- `npm run debug:axis:inspector` runs the long-lived Axis worker with the
+  Playwright Inspector enabled.
+- `npm run debug:worker:axis` pauses the worker at startup for a Node.js
+  debugger; it does not open the Playwright Inspector.
 
-Copy `.env.example` to `.env` and fill the CRM endpoints and credentials before
-starting a worker. Login and OTP remain operator-assisted, so the browser runs
-headed. Set `USE_DYNAMIC_PDF=true` to require
-`documents/<loan-number>-<RV|OV>.pdf`; otherwise the dummy PDF is used.
+Create the private production environment once from the checked-in template:
+
+```powershell
+Copy-Item .env.prod.example .env.prod
+```
+
+Fill every required value in `.env.prod`. The live worker, Playwright flow,
+debug/Inspector flow, and status-maintenance commands first run
+`npm run validate:prod`; after validation succeeds, `npm run env:prod`
+overwrites `.env` with the exact `.env.prod` contents. `.env.prod` is ignored by
+Git and must not be committed. You can run either preflight command directly
+when troubleshooting, but normally the main commands run both automatically.
+
+Login and OTP remain operator-assisted, so the browser runs headed. Set
+`USE_DYNAMIC_PDF=true` to require `documents/<loan-number>-<RV|OV>.pdf`;
+otherwise the dummy PDF is used.
+
+## Portal session management
+
+The worker checks for the authenticated list before claiming each CRM case.
+While idle, it sends a credentialed background request every
+`AXIS_KEEPALIVE_INTERVAL_MS` milliseconds (four minutes by default) to reduce
+idle expiry. A login/OTP redirect pauses CRM polling, brings the browser forward,
+and checks every `AXIS_AUTH_CHECK_INTERVAL_MS` milliseconds until the list view
+returns.
+
+The keepalive reduces idle expiry but cannot override a server-enforced maximum
+session lifetime. Those expirations are recovered through the same manual
+login/OTP pause without restarting the worker.
+
+## Automation CSV audit trail
+
+Every selected token gets a terminal or recovery outcome appended to a CSV under
+`AXIS_AUTOMATION_CSV_DIR` (`output/` by default):
+
+- `Axis_RV_Track.csv` for residence verifications.
+- `Axis_OV_Track.csv` for office verifications.
+
+Each row includes its timestamp, token ID, loan number, verification type,
+customer/agent fields, CRM status, automation status, details, and any error
+classification/message. Outcomes distinguish normal completion and failure from
+`SESSION_CHECK_RETRY`, `SESSION_EXPIRED_RETRY`, and
+`RECONCILIATION_REQUIRED`; this keeps pre-claim checks and safe pre-submit
+retries separate from post-submit cases that require review.
+
+The files are append-only across runs. If a CSV is temporarily locked or cannot
+be appended, the row is placed beside it in a `.pending.jsonl` queue and is
+flushed into the CSV by a later write or worker start. The existing per-run JSON
+and Excel reports remain available under `reports/`.
 
 ## CRM status maintenance
 
@@ -128,8 +192,9 @@ worker's final-recommendation allowlist.
 npm run update-status
 ```
 
-This command changes live CRM records. Review `.env` before running it and use
-the generated CSV in `output/` as the audit trail.
+This command changes live CRM records. Review `.env.prod` before running it;
+the command validates and copies that file to `.env`, then writes its maintenance
+audit CSV in `output/`.
 
 ## Change guide
 
@@ -141,7 +206,7 @@ the generated CSV in `output/` as the audit trail.
 - Questionnaire order or labels: the matching type's `form` folder
 - Shared Axis selectors/browser behavior: `src/banks/axis/portal`
 - Polling, lifecycle, or shutdown: `src/workers/axis`
-- Reporting or PDF behavior: the corresponding `src/core` module
+- Reporting, CSV audit, or PDF behavior: the corresponding `src/core` module
 
 Keep browser selectors out of workers and CRM lifecycle updates out of bank
 mappings. These boundaries mirror HDB and keep each layer independently

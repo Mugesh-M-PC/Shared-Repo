@@ -4,15 +4,15 @@
   "description": "Axis Bank Portal Automation using Playwright",
   "main": "scripts/runAxisVerificationWorker.js",
   "scripts": {
-    "test": "playwright test",
-    "start:axis": "node scripts/runAxisVerificationWorker.js",
-    "test:axis": "playwright test tests/axis/axisFlow.spec.js --headed",
-    "debug:axis": "playwright test tests/axis/axisFlow.spec.js --headed --debug",
-    "worker:axis": "node scripts/runAxisVerificationWorker.js",
-    "worker:ov": "node scripts/runAxisVerificationWorker.js OV",
-    "worker:rv": "node scripts/runAxisVerificationWorker.js RV",
-    "update-status": "playwright test tests/updateStatus.spec.js",
-    "test:mappings": "node --test unit-tests/*.test.js"
+    "test": "npm run validate:prod && npm run env:prod && playwright test",
+    "env:prod": "node -e \"require('node:fs').copyFileSync('.env.prod','.env')\"",
+    "validate:prod": "node scripts/validateAxisProduction.js --env-file .env.prod",
+    "start:axis": "npm run validate:prod && npm run env:prod && node scripts/runAxisVerificationWorker.js",
+    "test:axis": "npm run validate:prod && npm run env:prod && playwright test tests/axis/axisFlow.spec.js --headed",
+    "debug:axis": "npm run validate:prod && npm run env:prod && playwright test tests/axis/axisFlow.spec.js --headed --debug",
+    "debug:worker:axis": "npm run validate:prod && npm run env:prod && node --inspect-brk scripts/runAxisVerificationWorker.js",
+    "debug:axis:inspector": "npm run validate:prod && npm run env:prod && set PWDEBUG=1&& node scripts/runAxisVerificationWorker.js",
+    "update-status": "npm run env:prod && playwright test tests/updateStatus.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0"

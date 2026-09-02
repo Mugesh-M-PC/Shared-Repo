@@ -11,24 +11,36 @@ const {
 } = require('../../core/api/customerDetailsApi');
 const { getVerificationAdapter } = require('../../banks/axis/verificationAdapters');
 const { resolveDocumentUploadPath } = require('../../core/documents/documentService');
+const {
+    AxisPortalSessionManager,
+    PORTAL_AVAILABILITY,
+    PORTAL_ERROR_CATEGORIES,
+    createAxisPortalError,
+} = require('./portalSessionManager');
 
 class AxisProcessRunner {
     /** Bind one browser page to the page-object abstraction. */
-    constructor(page) {
+    constructor(page, options = {}) {
         this.page = page;
-        this.axisPage = new AxisPage(page);
+        this.axisPage = options.axisPage || new AxisPage(page);
+        this.sessionManager = options.sessionManager ||
+            new AxisPortalSessionManager({
+                page,
+                axisPage: this.axisPage,
+                logger: options.logger,
+                ...options.sessionOptions,
+            });
         this.initialized = false;
     }
 
-    /** Open the portal and wait for the user to finish login/OTP once. */
-    async initialize() {
+    /** Open the portal and wait whenever manual login/OTP is required. */
+    async initialize(options = {}) {
         await this.axisPage.open();
-        console.log('[Runner] Complete login and OTP verification once.');
-        await this.axisPage.waitUntilListViewVisible();
+        console.log('[Runner] Complete login and OTP verification when prompted.');
+        await this.waitForAuthentication(options);
         // Establish the portal-side work queue before the orchestrator checks
         // CRM for pending records. This prevents an empty CRM poll from
         // stopping the worker before the requested Axis list is selected.
-        await this.axisPage.selectListView('Open FI Cases with Agency');
         this.initialized = true;
         console.log(
             '[Runner] Browser authentication is ready and Open FI Cases ' +
@@ -36,30 +48,108 @@ class AxisProcessRunner {
         );
     }
 
-    /** Return to the list page when the previous case left us elsewhere. */
-    async ensureListPage() {
-        if (await this.axisPage.listViewTrigger.isVisible().catch(() => false)) {
+    /** Pause until login/OTP finishes, then restore the working list. */
+    async waitForAuthentication(options = {}) {
+        await this.sessionManager.waitForAuthentication(options);
+        await this.axisPage.selectListView('Open FI Cases with Agency');
+        this.sessionManager.markActivity();
+    }
+
+    /** Return to an authenticated list page, waiting for login if necessary. */
+    async ensureListPage(options = {}) {
+        await this.sessionManager.ensureListing(options);
+    }
+
+    /** Verify the server-side session immediately before a CRM case is claimed. */
+    async ensureSession(options = {}) {
+        await this.ensureListPage(options);
+        const availability = await this.sessionManager.keepAliveIfDue({
+            force: true,
+        });
+
+        if (availability.state === PORTAL_AVAILABILITY.LISTING_READY) {
             return;
         }
 
-        const listUrl = new URL('list-page.html', process.env.AXIS_PORTAL_URL);
-        await this.page.goto(listUrl.toString(), { waitUntil: 'domcontentloaded' });
-        await this.axisPage.waitUntilListViewVisible();
+        if (availability.state === PORTAL_AVAILABILITY.SESSION_EXPIRED) {
+            await this.waitForAuthentication(options);
+            return;
+        }
+
+        throw createAxisPortalError(
+            PORTAL_ERROR_CATEGORIES.RECOVERY_FAILED,
+            availability.reason ||
+                'The Axis session could not be verified before claiming CRM work.'
+        );
+    }
+
+    /** Send a due keepalive and pause polling if the session has expired. */
+    async maintainSession(options = {}) {
+        const availability = await this.sessionManager.keepAliveIfDue();
+
+        if (availability.state === PORTAL_AVAILABILITY.LISTING_READY) {
+            return;
+        }
+
+        if (availability.state === PORTAL_AVAILABILITY.SESSION_EXPIRED) {
+            await this.waitForAuthentication(options);
+            return;
+        }
+
+        await this.ensureListPage(options);
     }
 
     /** Return to the portal home/list view while the worker waits for CRM work. */
-    async prepareForIdle() {
+    async prepareForIdle(options = {}) {
         if (!this.initialized) return;
 
-        await this.ensureListPage();
+        await this.ensureListPage(options);
         await this.axisPage.selectListView('Open FI Cases with Agency');
+        this.sessionManager.markActivity();
         console.log(
             '[Runner] Returned to the Axis home list and waiting for pending cases.'
         );
     }
 
-    /** Process one pending dashboard case from start to confirmed submission. */
-    async processRecord(pendingCase) {
+    /** Classify login redirects without hiding the original browser failure. */
+    async processRecord(pendingCase, options = {}) {
+        const lifecycle = { submissionStarted: false };
+
+        try {
+            return await this.processRecordFlow(pendingCase, lifecycle, options);
+        } catch (error) {
+            if (
+                error?.category === PORTAL_ERROR_CATEGORIES.SESSION_EXPIRED ||
+                error?.category === PORTAL_ERROR_CATEGORIES.SUBMISSION_UNCERTAIN ||
+                error?.name === 'AbortError'
+            ) {
+                throw error;
+            }
+
+            if (await this.sessionManager.looksLikeLoginPage()) {
+                const submissionUncertain = lifecycle.submissionStarted;
+                throw createAxisPortalError(
+                    submissionUncertain
+                        ? PORTAL_ERROR_CATEGORIES.SUBMISSION_UNCERTAIN
+                        : PORTAL_ERROR_CATEGORIES.SESSION_EXPIRED,
+                    submissionUncertain
+                        ? 'The Axis session expired while FI submission was in progress; the bank outcome must be reconciled before retrying.'
+                        : 'The Axis session expired before FI submission. Manual login is required before retrying the case.',
+                    {
+                        cause: error,
+                        phase: submissionUncertain
+                            ? 'SUBMISSION_STARTED'
+                            : 'PRE_SUBMISSION',
+                    }
+                );
+            }
+
+            throw error;
+        }
+    }
+
+    /** Process one pending dashboard case from list search through submission. */
+    async processRecordFlow(pendingCase, lifecycle, options = {}) {
         if (!this.initialized) {
             throw new Error('AxisProcessRunner must be initialized before use.');
         }
@@ -69,7 +159,7 @@ class AxisProcessRunner {
             throw new Error('Pending process does not contain tokenid.');
         }
 
-        await this.ensureListPage();
+        await this.ensureListPage(options);
         // Re-assert the list for every case because returning from a details
         // page may reset the portal's current list selection.
         await this.axisPage.selectListView('Open FI Cases with Agency');
@@ -145,9 +235,16 @@ class AxisProcessRunner {
             `${String(process.env.USE_DYNAMIC_PDF).toLowerCase() === 'true' ? 'dynamic' : 'dummy'}`
         );
 
-        // submitFI resolves only after the popup Confirm button succeeds.
         await this.axisPage.uploadDocument(documentUploadPath);
-        await this.axisPage.submitFI();
+        await this.axisPage.submitFI({
+            // Only the final confirmation click crosses the uncertain-outcome
+            // boundary. Failures while merely opening the popup remain safe
+            // to return to PENDING and retry after login.
+            onConfirmationStarted: () => {
+                lifecycle.submissionStarted = true;
+            },
+        });
+        this.sessionManager.markActivity();
 
         return {
             tokenid: String(tokenid),

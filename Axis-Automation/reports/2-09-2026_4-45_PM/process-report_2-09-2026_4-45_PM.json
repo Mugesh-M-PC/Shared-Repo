@@ -1,0 +1,139 @@
+{
+  "updatedAt": "02-09-2026 04:53:34.384 PM IST",
+  "run": {
+    "startedAt": "02-09-2026 04:45:43.047 PM IST",
+    "completedAt": null,
+    "processLimit": 0,
+    "reportFile": "process-report_2-09-2026_4-45_PM.json",
+    "excelFile": "process-report_2-09-2026_4-45_PM.xlsx",
+    "reportFolder": "2-09-2026_4-45_PM"
+  },
+  "summary": {
+    "total": 13,
+    "pending": 0,
+    "running": 0,
+    "completed": 13,
+    "failed": 0,
+    "reconciliationRequired": 0
+  },
+  "failures": [],
+  "processes": [
+    {
+      "processId": "2776590",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:50:10.179 PM IST",
+      "completedAt": "02-09-2026 04:50:20.913 PM IST",
+      "duration": 10734,
+      "error": null
+    },
+    {
+      "processId": "2776589",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:50:00.164 PM IST",
+      "completedAt": "02-09-2026 04:50:10.175 PM IST",
+      "duration": 10011,
+      "error": null
+    },
+    {
+      "processId": "2776588",
+      "verificationType": "OV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:49:48.510 PM IST",
+      "completedAt": "02-09-2026 04:50:00.154 PM IST",
+      "duration": 11644,
+      "error": null
+    },
+    {
+      "processId": "2776516",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:49:38.122 PM IST",
+      "completedAt": "02-09-2026 04:49:48.497 PM IST",
+      "duration": 10375,
+      "error": null
+    },
+    {
+      "processId": "2776510",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:49:27.930 PM IST",
+      "completedAt": "02-09-2026 04:49:38.115 PM IST",
+      "duration": 10185,
+      "error": null
+    },
+    {
+      "processId": "2776509",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:49:17.433 PM IST",
+      "completedAt": "02-09-2026 04:49:27.912 PM IST",
+      "duration": 10479,
+      "error": null
+    },
+    {
+      "processId": "2776508",
+      "verificationType": "OV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:49:05.758 PM IST",
+      "completedAt": "02-09-2026 04:49:17.419 PM IST",
+      "duration": 11661,
+      "error": null
+    },
+    {
+      "processId": "2776501",
+      "verificationType": "OV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:48:54.094 PM IST",
+      "completedAt": "02-09-2026 04:49:05.749 PM IST",
+      "duration": 11655,
+      "error": null
+    },
+    {
+      "processId": "2776493",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:48:43.618 PM IST",
+      "completedAt": "02-09-2026 04:48:54.084 PM IST",
+      "duration": 10466,
+      "error": null
+    },
+    {
+      "processId": "2776492",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:48:33.785 PM IST",
+      "completedAt": "02-09-2026 04:48:43.611 PM IST",
+      "duration": 9826,
+      "error": null
+    },
+    {
+      "processId": "2776287",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:48:23.668 PM IST",
+      "completedAt": "02-09-2026 04:48:33.771 PM IST",
+      "duration": 10103,
+      "error": null
+    },
+    {
+      "processId": "2776154",
+      "verificationType": "RV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:48:12.970 PM IST",
+      "completedAt": "02-09-2026 04:48:23.656 PM IST",
+      "duration": 10686,
+      "error": null
+    },
+    {
+      "processId": "2776152",
+      "verificationType": "OV",
+      "status": "COMPLETED",
+      "startedAt": "02-09-2026 04:48:00.786 PM IST",
+      "completedAt": "02-09-2026 04:48:12.953 PM IST",
+      "duration": 12167,
+      "error": null
+    }
+  ]
+}

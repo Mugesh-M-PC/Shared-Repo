@@ -126,6 +126,41 @@ class AxisPage {
         console.log('[AxisPage] List view control is visible.');
     }
 
+    /** Return whether the authenticated case-list control is currently visible. */
+    async isListViewVisible() {
+        return this.listViewTrigger.isVisible().catch(() => false);
+    }
+
+    /** Detect Axis login, OTP, or authentication pages after a redirect. */
+    async looksLikeLoginPage() {
+        if (this.page.isClosed?.()) return false;
+
+        let pathname = '';
+        try {
+            pathname = new URL(this.page.url()).pathname;
+        } catch {
+            pathname = this.page.url();
+        }
+
+        if (/\/(?:login|sign[-_]?in|otp|authentication)(?:[./]|$)/i.test(pathname)) {
+            return true;
+        }
+
+        const authenticationControl = this.page.locator([
+            'input[type="password"]',
+            'input[autocomplete="one-time-code"]',
+            'input[name*="otp" i]',
+            'form[id*="login" i]',
+            'form[action*="login" i]',
+        ].join(', ')).first();
+        if (await authenticationControl.isVisible().catch(() => false)) {
+            return true;
+        }
+
+        const title = await this.page.title().catch(() => '');
+        return /(?:login|sign\s*in|one.?time password|\botp\b)/i.test(title);
+    }
+
     /** Choose a named case list from the portal menu. */
     async selectListView(listViewName) {
         console.log(`[AxisPage] Selecting list view: ${listViewName}`);
@@ -372,7 +407,7 @@ class AxisPage {
     }
 
     /** Submit FI through the confirmation popup and wait for success closure. */
-    async submitFI() {
+    async submitFI(options = {}) {
         const submitButton = this.page.locator('#submit-fi');
         const browserDialogHandler = async (dialog) => {
             console.log(
@@ -384,28 +419,41 @@ class AxisPage {
         await submitButton.waitFor({ state: 'visible' });
         console.log('[AxisPage] Clicking Submit FI...');
         this.page.once('dialog', browserDialogHandler);
-        await submitButton.click();
-        await this.page.waitForURL(
-            (url) =>
-                url.pathname.endsWith('/details-page.html') &&
-                url.searchParams.get('modal') === 'submit',
-            { timeout: 10000 }
-        );
-        const submitModal = this.page
-            .locator('[role="dialog"]:visible, .modal:visible')
-            .last();
-        await submitModal.waitFor({ state: 'visible', timeout: 10000 });
-        const popupText = (await submitModal.innerText())
-            .replace(/\s+/g, ' ')
-            .trim();
-        console.log(`[AxisPage] Submit FI popup: ${popupText}`);
+        try {
+            await submitButton.click();
+            await this.page.waitForURL(
+                (url) =>
+                    url.pathname.endsWith('/details-page.html') &&
+                    url.searchParams.get('modal') === 'submit',
+                { timeout: 10000 }
+            );
+            const submitModal = this.page
+                .locator('[role="dialog"]:visible, .modal:visible')
+                .last();
+            await submitModal.waitFor({ state: 'visible', timeout: 10000 });
+            const popupText = (await submitModal.innerText())
+                .replace(/\s+/g, ' ')
+                .trim();
+            console.log(`[AxisPage] Submit FI popup: ${popupText}`);
 
-        const confirmButton = submitModal.locator('#confirm-submit');
-        await confirmButton.waitFor({ state: 'visible' });
-        console.log('[AxisPage] Clicking Confirm in the Submit FI popup...');
-        await confirmButton.click();
-        await submitModal.waitFor({ state: 'hidden', timeout: 10000 });
-        this.page.removeListener('dialog', browserDialogHandler);
+            const confirmButton = submitModal.locator('#confirm-submit');
+            await confirmButton.waitFor({ state: 'visible' });
+            console.log('[AxisPage] Clicking Confirm in the Submit FI popup...');
+            await options.onConfirmationStarted?.();
+            await confirmButton.click();
+            await submitModal.waitFor({ state: 'hidden', timeout: 10000 });
+        } finally {
+            // An expiry while opening the popup must not leave a stale handler
+            // that could accept a dialog during the retried case.
+            this.page.removeListener('dialog', browserDialogHandler);
+        }
+
+        if (await this.looksLikeLoginPage()) {
+            throw new Error(
+                'Axis returned to login while confirming FI submission.'
+            );
+        }
+
         console.log('[AxisPage] FI submission confirmed.');
     }
 
