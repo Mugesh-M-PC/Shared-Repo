@@ -131,6 +131,20 @@ class ProcessOrchestrator {
                         `process(es); ${eligibleProcesses.length} match ` +
                         `${this.verificationTypeFilter || 'RV and OV'}.`
                     );
+
+                    // An empty queue is only an idle state. Keep the browser
+                    // session alive and poll again after pollIntervalMs; the
+                    // worker stops only on a shutdown signal (or an explicit
+                    // PROCESS_LIMIT, when one is configured).
+                    if (eligibleProcesses.length === 0) {
+                        this.reportService.syncPending([]);
+                        console.log(
+                            '[Orchestrator] No eligible pending cases found ' +
+                            'after selecting Open FI Cases with Agency. ' +
+                            'Keeping the worker active.'
+                        );
+                    }
+
                     // A zero limit means unlimited; otherwise take only the
                     // number of records remaining in this run's allowance.
                     const remainingLimit = this.processLimit === 0
@@ -157,6 +171,13 @@ class ProcessOrchestrator {
                             );
                             break;
                         }
+                    }
+
+                    // Once the current CRM batch is exhausted, leave the
+                    // browser on the portal home/list page while polling for
+                    // newly pending records.
+                    if (!this.stopRequested && selectedProcesses.length > 0) {
+                        await this.runner.prepareForIdle();
                     }
                 } catch (error) {
                     console.error(`[Orchestrator] Poll failed: ${error.stack ?? error}`);

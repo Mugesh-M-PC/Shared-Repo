@@ -25,8 +25,15 @@ class AxisProcessRunner {
         await this.axisPage.open();
         console.log('[Runner] Complete login and OTP verification once.');
         await this.axisPage.waitUntilListViewVisible();
+        // Establish the portal-side work queue before the orchestrator checks
+        // CRM for pending records. This prevents an empty CRM poll from
+        // stopping the worker before the requested Axis list is selected.
+        await this.axisPage.selectListView('Open FI Cases with Agency');
         this.initialized = true;
-        console.log('[Runner] Browser authentication is ready.');
+        console.log(
+            '[Runner] Browser authentication is ready and Open FI Cases ' +
+            'with Agency is selected.'
+        );
     }
 
     /** Return to the list page when the previous case left us elsewhere. */
@@ -38,6 +45,17 @@ class AxisProcessRunner {
         const listUrl = new URL('list-page.html', process.env.AXIS_PORTAL_URL);
         await this.page.goto(listUrl.toString(), { waitUntil: 'domcontentloaded' });
         await this.axisPage.waitUntilListViewVisible();
+    }
+
+    /** Return to the portal home/list view while the worker waits for CRM work. */
+    async prepareForIdle() {
+        if (!this.initialized) return;
+
+        await this.ensureListPage();
+        await this.axisPage.selectListView('Open FI Cases with Agency');
+        console.log(
+            '[Runner] Returned to the Axis home list and waiting for pending cases.'
+        );
     }
 
     /** Process one pending dashboard case from start to confirmed submission. */
@@ -52,6 +70,8 @@ class AxisProcessRunner {
         }
 
         await this.ensureListPage();
+        // Re-assert the list for every case because returning from a details
+        // page may reset the portal's current list selection.
         await this.axisPage.selectListView('Open FI Cases with Agency');
 
         const customerResponse = await getCustomerDetailsByTokenId(

@@ -43,12 +43,13 @@ function formatIndianDateTime(date) {
         `${parts.dayPeriod} IST`;
 }
 
-/** Format an IST timestamp using only characters safe for folder names. */
+/** Format an IST timestamp like D-MM-YYYY_h-mm_AM using filename-safe separators. */
 function formatIndianFolderTimestamp(date) {
     const parts = getIndianDateTimeParts(date);
-    return `${parts.year}-${parts.month}-${parts.day}_` +
-        `${parts.hour}-${parts.minute}-${parts.second}-${parts.millisecond}_` +
-        `${parts.dayPeriod}_IST`;
+    const day = Number(parts.day);
+    const hour = Number(parts.hour);
+    return `${day}-${parts.month}-${parts.year}_` +
+        `${hour}-${parts.minute}_${parts.dayPeriod}`;
 }
 
 class ReportService {
@@ -110,8 +111,9 @@ class ReportService {
         }
         fs.mkdirSync(runDirectory, { recursive: true });
 
-        this.reportPath = path.join(runDirectory, `${baseName}${extension}`);
-        this.excelReportPath = path.join(runDirectory, `${baseName}.xlsx`);
+        const reportName = `${baseName}_${timestamp}`;
+        this.reportPath = path.join(runDirectory, `${reportName}${extension}`);
+        this.excelReportPath = path.join(runDirectory, `${reportName}.xlsx`);
 
         this.report = {
             updatedAt: null,
